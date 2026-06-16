@@ -1,0 +1,11 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: erp-backend
+
+erp:
+  jwt-secret: "ERP-CORE-LOOP-DEVELOPMENT-SECRET-CHANGE-IN-PRODUCTION-2026"
+  jwt-expire-minutes: 720
+

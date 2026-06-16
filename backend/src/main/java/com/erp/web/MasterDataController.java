@@ -1,0 +1,55 @@
+package com.erp.web;
+
+import com.erp.common.ApiResult;
+import com.erp.domain.ErpModels.RoleCode;
+import com.erp.domain.ErpModels.Status;
+import com.erp.store.ErpStore;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.Map;
+
+@RestController
+@RequestMapping("/api/masterdata")
+public class MasterDataController {
+    private final ErpStore store;
+
+    public MasterDataController(ErpStore store) {
+        this.store = store;
+    }
+
+    @GetMapping("/{type}")
+    public ApiResult<?> list(@PathVariable String type,
+                             @RequestParam(required = false) String keyword,
+                             @RequestParam(required = false) String status) {
+        return ApiResult.success(store.masters(type, keyword, status));
+    }
+
+    @PostMapping("/{type}")
+    public ApiResult<?> create(@PathVariable String type, @RequestBody Map<String, String> payload) {
+        return ApiResult.success(store.createMaster(type, payload));
+    }
+
+    @PutMapping("/{type}/{id}")
+    public ApiResult<?> update(@PathVariable String type, @PathVariable Long id, @RequestBody Map<String, String> payload) {
+        return ApiResult.success(store.updateMaster(type, id, payload));
+    }
+
+    @PatchMapping("/{type}/{id}/status")
+    public ApiResult<?> status(@PathVariable String type, @PathVariable Long id, @RequestBody Map<String, String> payload) {
+        return ApiResult.success(store.changeMasterStatus(type, id, Status.valueOf(payload.get("status"))));
+    }
+
+    @GetMapping("/warehouse-staff")
+    public ApiResult<?> warehouseStaff() {
+        return ApiResult.success(store.usersByRole(RoleCode.WAREHOUSE_STAFF));
+    }
+}
+

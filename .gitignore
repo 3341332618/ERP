@@ -1,0 +1,35 @@
+# Java / Spring Boot
+target/
+*.class
+*.log
+**/.mvn/wrapper/maven-wrapper.jar
+**/.mvn/wrapper/apache-maven-*/
+**/.mvn/wrapper/apache-maven-*.zip
+
+# Node / Vue
+node_modules/
+dist/
+coverage/
+.vite/
+.npm-cache/
+*.tsbuildinfo
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Runtime uploads
+uploads/
+
+# Generated document extraction intermediates
+*.extracted-utf16.txt
