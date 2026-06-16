@@ -87,6 +87,7 @@ public final class ErpModels {
         public String passwordHash;
         public String name;
         public String phone;
+        public String avatar;
         public RoleCode role;
         public Status status = Status.ENABLED;
         public LocalDateTime createTime = LocalDateTime.now();
@@ -128,6 +129,7 @@ public final class ErpModels {
         public String unitName;
         public BigDecimal purchasePrice;
         public BigDecimal salePrice;
+        public String imageData;
         public String contact;
         public String phone;
         public String address;
@@ -195,4 +197,3 @@ public final class ErpModels {
         public LocalDateTime createTime = LocalDateTime.now();
     }
 }
-

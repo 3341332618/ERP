@@ -31,5 +31,8 @@ Thumbs.db
 # Runtime uploads
 uploads/
 
+# Local browser verification artifacts
+.playwright-mcp/
+
 # Generated document extraction intermediates
 *.extracted-utf16.txt

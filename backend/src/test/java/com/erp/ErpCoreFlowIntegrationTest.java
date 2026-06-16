@@ -27,4 +27,25 @@ class ErpCoreFlowIntegrationTest {
         assertThat(store.stockList()).anySatisfy(stock -> assertThat(stock.actualQuantity).isGreaterThan(BigDecimal.ZERO));
         assertThat(store.settlements("expense")).anySatisfy(record -> assertThat(record.documentType).isEqualTo("采入支出"));
     }
+
+    @Test
+    void profileAvatarCanBeUploadedAndProductImageFollowsDocumentUploadRule() {
+        var admin = store.userByUsername("admin");
+        var pngData = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=";
+
+        store.updateAvatar(admin.id, pngData);
+        var product = store.createMaster("product", java.util.Map.of(
+            "name", "上传图片商品",
+            "categoryName", "办公设备",
+            "brandName", "连想",
+            "unitName", "台",
+            "purchasePrice", "100",
+            "salePrice", "120",
+            "imageData", pngData
+        ));
+
+        assertThat(store.userById(admin.id).avatar).isEqualTo(pngData);
+        assertThat(product.imageData).isEqualTo(pngData);
+        org.junit.jupiter.api.Assertions.assertThrows(RuntimeException.class, () -> store.updateAvatar(admin.id, "data:image/gif;base64,AAAA"));
+    }
 }

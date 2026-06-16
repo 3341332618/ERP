@@ -11,6 +11,7 @@ export interface CurrentUser {
   username: string
   name: string
   phone: string
+  avatar: string
   role: string
   roleName: string
   createTime: string
@@ -26,6 +27,10 @@ export function currentUser() {
 
 export function changePassword(data: { oldPassword: string; newPassword: string; confirmPassword: string }) {
   return http.post('/auth/change-password', data)
+}
+
+export function uploadAvatar(avatar: string) {
+  return http.post('/auth/avatar', { avatar }) as Promise<CurrentUser>
 }
 
 export function fetchMessages() {
@@ -83,4 +88,3 @@ export function rejectAudit(id: number, reason: string) {
 export function listSettlement(direction: string) {
   return http.get(`/settlement/${direction}`) as Promise<any[]>
 }
-

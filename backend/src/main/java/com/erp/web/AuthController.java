@@ -62,12 +62,19 @@ public class AuthController {
         return ApiResult.success();
     }
 
+    @PostMapping("/avatar")
+    public ApiResult<Map<String, Object>> avatar(Authentication authentication, @RequestBody AvatarRequest request) {
+        var user = store.userByUsername(authentication.getName());
+        return ApiResult.success(userView(store.updateAvatar(user.id, request.avatar())));
+    }
+
     private Map<String, Object> userView(User user) {
         return Map.of(
             "id", user.id,
             "username", user.username,
             "name", user.name,
             "phone", user.phone,
+            "avatar", user.avatar == null ? "" : user.avatar,
             "role", user.role.name(),
             "roleName", user.role.label,
             "createTime", user.createTime.toString()
@@ -82,5 +89,7 @@ public class AuthController {
 
     public record ChangePasswordRequest(String oldPassword, String newPassword, String confirmPassword) {
     }
-}
 
+    public record AvatarRequest(String avatar) {
+    }
+}

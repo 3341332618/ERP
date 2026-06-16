@@ -10,6 +10,7 @@ import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.LinkedHashMap;
@@ -100,6 +101,12 @@ public class ErpStore {
         return user;
     }
 
+    public User updateAvatar(Long userId, String avatarData) {
+        var user = userById(userId);
+        user.avatar = validatedImage(avatarData);
+        return user;
+    }
+
     public List<MenuNode> menus(RoleCode role) {
         var menus = new ArrayList<MenuNode>();
         if (role == RoleCode.ADMIN) {
@@ -168,6 +175,7 @@ public class ErpStore {
         record.unitName = payload.get("unitName");
         record.purchasePrice = money(payload.getOrDefault("purchasePrice", "0"));
         record.salePrice = money(payload.getOrDefault("salePrice", "0"));
+        record.imageData = validatedImage(payload.get("imageData"));
         record.contact = payload.get("contact");
         record.phone = payload.get("phone");
         record.address = payload.get("address");
@@ -188,6 +196,9 @@ public class ErpStore {
         record.unitName = payload.getOrDefault("unitName", record.unitName);
         record.purchasePrice = money(payload.getOrDefault("purchasePrice", record.purchasePrice == null ? "0" : record.purchasePrice.toString()));
         record.salePrice = money(payload.getOrDefault("salePrice", record.salePrice == null ? "0" : record.salePrice.toString()));
+        if (payload.containsKey("imageData")) {
+            record.imageData = validatedImage(payload.get("imageData"));
+        }
         record.contact = payload.getOrDefault("contact", record.contact);
         record.phone = payload.getOrDefault("phone", record.phone);
         record.address = payload.getOrDefault("address", record.address);
@@ -555,6 +566,33 @@ public class ErpStore {
         return new BigDecimal(value).setScale(2, RoundingMode.HALF_UP);
     }
 
+    private String validatedImage(String imageData) {
+        if (imageData == null || imageData.isBlank()) {
+            return null;
+        }
+        var pngPrefix = "data:image/png;base64,";
+        var jpegPrefix = "data:image/jpeg;base64,";
+        var jpgPrefix = "data:image/jpg;base64,";
+        String base64;
+        if (imageData.startsWith(pngPrefix)) {
+            base64 = imageData.substring(pngPrefix.length());
+        } else if (imageData.startsWith(jpegPrefix)) {
+            base64 = imageData.substring(jpegPrefix.length());
+        } else if (imageData.startsWith(jpgPrefix)) {
+            base64 = imageData.substring(jpgPrefix.length());
+        } else {
+            throw new BusinessException("请上传JPG/PNG类型格式文件");
+        }
+        try {
+            if (Base64.getDecoder().decode(base64).length > 200 * 1024) {
+                throw new BusinessException("上传文件大小不能超过200KB");
+            }
+        } catch (IllegalArgumentException ex) {
+            throw new BusinessException("请上传JPG/PNG类型格式文件");
+        }
+        return imageData;
+    }
+
     private String defaultSettlement(String type) {
         return "supplier".equals(type) ? "货到付款" : "付款发货";
     }
@@ -578,4 +616,3 @@ public class ErpStore {
         }
     }
 }
-

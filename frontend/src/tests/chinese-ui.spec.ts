@@ -16,6 +16,7 @@ const allowedTechnical = [
   'async',
   'await'
 ]
+const legacySalePriceLabel = ['建议', '销售价'].join('')
 
 function files(dir: string): string[] {
   return readdirSync(dir).flatMap((name: string) => {
@@ -36,6 +37,11 @@ describe('中文界面文案', () => {
     expect(content).toContain('销售出库')
     expect(content).toContain('库存分布')
     expect(content).toContain('收入结算')
+    expect(content).toContain('上传头像')
+    expect(content).toContain('头像上传成功')
+    expect(content).toContain('建议零售价')
+    expect(content).toContain('上传文件大小不能超过200KB')
+    expect(content).not.toContain(legacySalePriceLabel)
     expect(allowedTechnical.length).toBeGreaterThan(0)
   })
 })

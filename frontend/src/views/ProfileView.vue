@@ -4,6 +4,20 @@
       <el-col :span="10">
         <div class="table-panel">
           <h2>个人信息</h2>
+          <div class="profile-header">
+            <el-avatar :size="76" :src="auth.user?.avatar || undefined">{{ avatarFallback }}</el-avatar>
+            <div class="avatar-actions">
+              <el-upload
+                :auto-upload="false"
+                :show-file-list="false"
+                accept=".jpg,.jpeg,.png,image/jpeg,image/png"
+                :on-change="handleAvatarChange"
+              >
+                <el-button type="primary">上传头像</el-button>
+              </el-upload>
+              <el-button v-if="auth.user?.avatar" @click="removeAvatar">删除头像</el-button>
+            </div>
+          </div>
           <el-descriptions :column="1" border>
             <el-descriptions-item label="姓名">{{ auth.user?.name }}</el-descriptions-item>
             <el-descriptions-item label="联系电话">{{ auth.user?.phone }}</el-descriptions-item>
@@ -31,13 +45,28 @@
 </template>
 
 <script setup lang="ts">
-import { reactive } from 'vue'
+import { computed, reactive } from 'vue'
 import { ElMessage } from 'element-plus'
-import { changePassword } from '../api'
+import type { UploadFile } from 'element-plus'
+import { changePassword, uploadAvatar } from '../api'
 import { useAuthStore } from '../stores/auth'
+import { readValidDocumentImage } from '../utils/imageUpload'
 
 const auth = useAuthStore()
 const form = reactive({ oldPassword: '', newPassword: '', confirmPassword: '' })
+const avatarFallback = computed(() => auth.user?.name?.slice(0, 1) || '用')
+
+async function handleAvatarChange(file: UploadFile) {
+  const avatar = await readValidDocumentImage(file.raw)
+  if (!avatar) return
+  auth.user = await uploadAvatar(avatar)
+  ElMessage.success('头像上传成功')
+}
+
+async function removeAvatar() {
+  auth.user = await uploadAvatar('')
+  ElMessage.success('头像已删除')
+}
 
 async function save() {
   await changePassword(form)
@@ -57,5 +86,17 @@ h2 {
   margin: 0 0 12px;
   font-size: 16px;
 }
-</style>
 
+.profile-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.avatar-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+</style>
