@@ -44,4 +44,14 @@ describe('中文界面文案', () => {
     expect(content).not.toContain(legacySalePriceLabel)
     expect(allowedTechnical.length).toBeGreaterThan(0)
   })
+
+  it('库存调拨路由使用库存调拨单配置', () => {
+    const router = readFileSync(join(process.cwd(), 'src/router/index.ts'), 'utf8')
+    const documentView = readFileSync(join(process.cwd(), 'src/views/DocumentView.vue'), 'utf8')
+
+    expect(router).toContain("path: 'inventory/transfer'")
+    expect(documentView).toContain("route.path === '/inventory/transfer'")
+    expect(documentView).toContain("api: 'stock-transfer'")
+    expect(documentView).toContain('请输入库存调拨单号查询')
+  })
 })

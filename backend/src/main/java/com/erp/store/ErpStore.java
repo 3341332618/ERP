@@ -235,6 +235,10 @@ public class ErpStore {
     }
 
     public DocumentRecord createSimpleDocument(String typeCode, Long userId) {
+        return createDocument(typeCode, userId, Map.of());
+    }
+
+    public DocumentRecord createDocument(String typeCode, Long userId, Map<String, String> payload) {
         var type = DocumentType.byCode(typeCode);
         var document = new DocumentRecord();
         document.id = ids.incrementAndGet();
@@ -244,7 +248,10 @@ public class ErpStore {
         document.creatorId = user.id;
         document.creatorName = user.name;
         fillDocumentParties(document);
-        document.items.add(defaultItem(document.warehouseId));
+        applyDocumentPayload(document, payload == null ? Map.of() : payload);
+        document.items.add(document.type == DocumentType.STOCK_TRANSFER && payload != null && !payload.isEmpty()
+            ? transferItem(document, payload)
+            : defaultItem(document.warehouseId));
         recalc(document);
         documents.put(document.id, document);
         return document;
@@ -315,6 +322,7 @@ public class ErpStore {
         document.auditorId = auditor.id;
         document.auditorName = auditor.name;
         document.auditTime = LocalDateTime.now();
+        recalcAvailable();
         createSettlement(document);
         return document;
     }
@@ -394,6 +402,44 @@ public class ErpStore {
         item.amount = item.quantity.multiply(item.price).setScale(2, RoundingMode.HALF_UP);
         item.availableQuantity = available(warehouseId, product.id);
         item.remark = "正常调拨";
+        return item;
+    }
+
+    private void applyDocumentPayload(DocumentRecord document, Map<String, String> payload) {
+        if (document.type != DocumentType.STOCK_TRANSFER || payload.isEmpty()) {
+            return;
+        }
+        var sourceWarehouse = masterRecord("warehouse", longRequired(payload, "warehouseId", "调出仓库必填，请重新输入。"));
+        var targetWarehouse = masterRecord("warehouse", longRequired(payload, "targetWarehouseId", "调入仓库必填，请重新输入。"));
+        if (sourceWarehouse.id.equals(targetWarehouse.id)) {
+            throw new BusinessException("调入仓库不能与调出仓库相同，请重新选择。");
+        }
+        document.warehouseId = sourceWarehouse.id;
+        document.warehouseCode = sourceWarehouse.code;
+        document.warehouseName = sourceWarehouse.name;
+        document.targetWarehouseId = targetWarehouse.id;
+        document.targetWarehouseCode = targetWarehouse.code;
+        document.targetWarehouseName = targetWarehouse.name;
+    }
+
+    private DocumentItem transferItem(DocumentRecord document, Map<String, String> payload) {
+        var product = masterRecord("product", longRequired(payload, "productId", "商品必填，请重新输入。"));
+        var item = new DocumentItem();
+        item.productId = product.id;
+        item.productCode = product.code;
+        item.productName = product.name;
+        item.categoryName = product.categoryName;
+        item.brandName = product.brandName;
+        item.unitName = product.unitName;
+        item.quantity = quantityRequired(payload.get("quantity"), "调出数量必填，请重新输入。");
+        item.price = BigDecimal.ZERO;
+        item.amount = BigDecimal.ZERO;
+        item.availableQuantity = available(document.warehouseId, product.id);
+        item.remark = payload.getOrDefault("remark", "");
+        require(item.remark, "备注必填，请重新输入。");
+        if (item.quantity.compareTo(item.availableQuantity) > 0) {
+            throw new BusinessException("可用库存不足，请重新输入调出数量。");
+        }
         return item;
     }
 
@@ -564,6 +610,21 @@ public class ErpStore {
 
     private BigDecimal money(String value) {
         return new BigDecimal(value).setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private Long longRequired(Map<String, String> payload, String key, String message) {
+        var value = payload.get(key);
+        require(value, message);
+        return Long.valueOf(value);
+    }
+
+    private BigDecimal quantityRequired(String value, String message) {
+        require(value, message);
+        var quantity = new BigDecimal(value).setScale(2, RoundingMode.HALF_UP);
+        if (quantity.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new BusinessException(message);
+        }
+        return quantity;
     }
 
     private String validatedImage(String imageData) {

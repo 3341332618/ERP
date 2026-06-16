@@ -7,8 +7,11 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/documents")
@@ -26,9 +29,11 @@ public class DocumentController {
     }
 
     @PostMapping("/{type}")
-    public ApiResult<?> create(@PathVariable String type, Authentication authentication) {
+    public ApiResult<?> create(@PathVariable String type,
+                               @RequestBody(required = false) Map<String, String> payload,
+                               Authentication authentication) {
         var user = store.userByUsername(authentication.getName());
-        return ApiResult.success(store.createSimpleDocument(type, user.id));
+        return ApiResult.success(store.createDocument(type, user.id, payload == null ? Map.of() : payload));
     }
 
     @GetMapping("/{type}/{id}")
@@ -48,4 +53,3 @@ public class DocumentController {
         return ApiResult.success(store.deleteDocument(id, user.id));
     }
 }
-

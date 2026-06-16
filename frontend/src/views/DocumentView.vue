@@ -2,10 +2,10 @@
   <div class="page">
     <div class="table-panel">
       <div class="toolbar">
-        <el-input v-model="keyword" :placeholder="`请输入${config.name}单号查询`" clearable style="width: 260px" />
+        <el-input v-model="keyword" :placeholder="keywordPlaceholder" clearable style="width: 260px" />
         <el-button type="primary" @click="load">查询</el-button>
         <el-button @click="keyword = ''; load()">重置</el-button>
-        <el-button type="success" @click="create">新增</el-button>
+        <el-button type="success" @click="create">{{ isTransfer ? '新增库存调拨单' : '新增' }}</el-button>
       </div>
       <el-table :data="filteredRows" border empty-text="暂无数据">
         <el-table-column type="index" label="序号" width="70" />
@@ -47,11 +47,25 @@
         <el-table-column prop="amount" label="结算金额" />
       </el-table>
     </el-dialog>
+
+    <el-dialog v-model="transferDialogVisible" title="新增库存调拨单" width="560px">
+      <el-form :model="transferForm" label-width="110px">
+        <el-form-item label="调出仓库"><el-input v-model="transferForm.warehouseId" placeholder="请输入调出仓库标识" /></el-form-item>
+        <el-form-item label="调入仓库"><el-input v-model="transferForm.targetWarehouseId" placeholder="请输入调入仓库标识" /></el-form-item>
+        <el-form-item label="商品"><el-input v-model="transferForm.productId" placeholder="请输入商品标识" /></el-form-item>
+        <el-form-item label="调出数量"><el-input v-model="transferForm.quantity" placeholder="请输入调出数量" /></el-form-item>
+        <el-form-item label="备注"><el-input v-model="transferForm.remark" placeholder="请输入备注" /></el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="transferDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="saveTransfer">保存</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { createDocument, deleteDocument, listDocuments, submitDocument } from '../api'
@@ -60,10 +74,22 @@ const route = useRoute()
 const rows = ref<any[]>([])
 const keyword = ref('')
 const dialogVisible = ref(false)
+const transferDialogVisible = ref(false)
 const current = ref<any>()
+const transferForm = reactive({
+  warehouseId: '',
+  targetWarehouseId: '',
+  productId: '',
+  quantity: '',
+  remark: ''
+})
+const isTransfer = computed(() => route.path === '/inventory/transfer')
 
 const config = computed(() => {
   const type = String(route.params.type)
+  if (route.path === '/inventory/transfer') {
+    return { api: 'stock-transfer', name: '库存调拨', partnerCode: '调入仓库编号', partnerName: '调入仓库名称' }
+  }
   if (route.path.startsWith('/sales') && type === 'return') {
     return { api: 'sales-return', name: '销售退货', partnerCode: '客户编号', partnerName: '客户名称' }
   }
@@ -73,11 +99,9 @@ const config = computed(() => {
   if (route.path.startsWith('/sales') && type === 'outbound') {
     return { api: 'sales-outbound', name: '销售出库', partnerCode: '客户编号', partnerName: '客户名称' }
   }
-  if (route.path.startsWith('/inventory') && type === 'transfer') {
-    return { api: 'stock-transfer', name: '库存调拨', partnerCode: '调入仓库编号', partnerName: '调入仓库名称' }
-  }
   return { api: 'purchase-inbound', name: '采购入库', partnerCode: '供应商编号', partnerName: '供应商名称' }
 })
+const keywordPlaceholder = computed(() => isTransfer.value ? '请输入库存调拨单号查询' : `请输入${config.value.name}单号查询`)
 const filteredRows = computed(() => rows.value.filter((row) => !keyword.value || row.documentNo.includes(keyword.value)))
 
 function statusLabel(status?: string) {
@@ -89,8 +113,24 @@ async function load() {
 }
 
 async function create() {
+  if (isTransfer.value) {
+    transferForm.warehouseId = ''
+    transferForm.targetWarehouseId = ''
+    transferForm.productId = ''
+    transferForm.quantity = ''
+    transferForm.remark = ''
+    transferDialogVisible.value = true
+    return
+  }
   await createDocument(config.value.api)
   ElMessage.success('新增成功')
+  await load()
+}
+
+async function saveTransfer() {
+  await createDocument(config.value.api, transferForm)
+  ElMessage.success('新增成功')
+  transferDialogVisible.value = false
   await load()
 }
 

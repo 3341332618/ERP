@@ -57,8 +57,8 @@ export function listDocuments(type: string) {
   return http.get(`/documents/${type}`) as Promise<any[]>
 }
 
-export function createDocument(type: string) {
-  return http.post(`/documents/${type}`) as Promise<any>
+export function createDocument(type: string, data: Record<string, string> = {}) {
+  return http.post(`/documents/${type}`, data) as Promise<any>
 }
 
 export function submitDocument(type: string, id: number) {
