@@ -7,6 +7,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -30,10 +31,19 @@ public class DocumentController {
 
     @PostMapping("/{type}")
     public ApiResult<?> create(@PathVariable String type,
-                               @RequestBody(required = false) Map<String, String> payload,
+                               @RequestBody(required = false) Map<String, Object> payload,
                                Authentication authentication) {
         var user = store.userByUsername(authentication.getName());
         return ApiResult.success(store.createDocument(type, user.id, payload == null ? Map.of() : payload));
+    }
+
+    @PutMapping("/{type}/{id}")
+    public ApiResult<?> update(@PathVariable String type,
+                               @PathVariable Long id,
+                               @RequestBody(required = false) Map<String, Object> payload,
+                               Authentication authentication) {
+        var user = store.userByUsername(authentication.getName());
+        return ApiResult.success(store.updateDocument(type, id, user.id, payload == null ? Map.of() : payload));
     }
 
     @GetMapping("/{type}/{id}")

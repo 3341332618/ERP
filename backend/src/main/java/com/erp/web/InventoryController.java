@@ -23,7 +23,7 @@ public class InventoryController {
 
     @GetMapping("/stock")
     public ApiResult<?> stock() {
-        return ApiResult.success(store.stockList());
+        return ApiResult.success(store.stockViews());
     }
 
     @GetMapping("/audit/{direction}")
@@ -44,4 +44,3 @@ public class InventoryController {
         return ApiResult.success(store.reject(id, user.id, payload.get("reason")));
     }
 }
-

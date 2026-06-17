@@ -209,8 +209,61 @@ public class ErpStore {
         return record;
     }
 
+    public List<MasterRecord> importProducts(List<Map<String, String>> rows) {
+        if (rows == null || rows.isEmpty()) {
+            throw new BusinessException("导入文件内容不能为空。");
+        }
+        var errors = new ArrayList<String>();
+        var normalizedRows = new ArrayList<Map<String, String>>();
+        for (int i = 0; i < rows.size(); i++) {
+            var rowNumber = i + 2;
+            var row = rows.get(i);
+            var name = importValue(row, "name", "商品名称");
+            var categoryName = importValue(row, "categoryName", "商品分类");
+            var brandName = importValue(row, "brandName", "商品品牌");
+            var unitName = importValue(row, "unitName", "商品单位");
+            var purchasePrice = importValue(row, "purchasePrice", "建议采购价（元）");
+            var salePrice = importValue(row, "salePrice", "建议零售价（元）");
+            if (name.isBlank()) {
+                errors.add("第" + rowNumber + "行：商品名称必填");
+            }
+            if (categoryName.isBlank()) {
+                errors.add("第" + rowNumber + "行：商品分类必填");
+            }
+            if (brandName.isBlank()) {
+                errors.add("第" + rowNumber + "行：商品品牌必填");
+            }
+            if (unitName.isBlank()) {
+                errors.add("第" + rowNumber + "行：商品单位必填");
+            }
+            if (!validMoney(purchasePrice)) {
+                errors.add("第" + rowNumber + "行：建议采购价（元）输入有误");
+            }
+            if (!validMoney(salePrice)) {
+                errors.add("第" + rowNumber + "行：建议零售价（元）输入有误");
+            }
+            normalizedRows.add(Map.of(
+                "name", name,
+                "categoryName", categoryName,
+                "brandName", brandName,
+                "unitName", unitName,
+                "purchasePrice", purchasePrice,
+                "salePrice", salePrice
+            ));
+        }
+        if (!errors.isEmpty()) {
+            throw new BusinessException(String.join("；", errors));
+        }
+        return normalizedRows.stream()
+            .map(row -> createMaster("product", row))
+            .toList();
+    }
+
     public MasterRecord changeMasterStatus(String type, Long id, Status status) {
         var record = masterRecord(type, id);
+        if (status == Status.DISABLED) {
+            assertCanDisable(record);
+        }
         record.status = status;
         record.updateTime = LocalDateTime.now();
         return record;
@@ -222,6 +275,53 @@ public class ErpStore {
             throw new BusinessException(displayName(type) + "不存在");
         }
         return record;
+    }
+
+    private void assertCanDisable(MasterRecord record) {
+        if ("product".equals(record.type)) {
+            var hasStock = stocks.stream()
+                .anyMatch(stock -> stock.productId.equals(record.id) && stock.actualQuantity.compareTo(BigDecimal.ZERO) > 0);
+            if (hasStock) {
+                throw new BusinessException("商品存在实际库存数量，无法禁用。");
+            }
+            if (hasOpenDocumentForProduct(record.id)) {
+                throw new BusinessException("商品关联单据流转中，无法禁用。");
+            }
+        }
+        if ("warehouse".equals(record.type)) {
+            var hasStock = stocks.stream()
+                .anyMatch(stock -> stock.warehouseId.equals(record.id) && stock.actualQuantity.compareTo(BigDecimal.ZERO) > 0);
+            if (hasStock) {
+                throw new BusinessException("仓库存在商品，无法禁用。");
+            }
+            if (hasOpenDocumentForWarehouse(record.id)) {
+                throw new BusinessException("仓库关联单据流转中，无法禁用。");
+            }
+        }
+        if ("customer".equals(record.type) || "supplier".equals(record.type)) {
+            if (hasOpenDocumentForPartner(record.id)) {
+                throw new BusinessException(displayName(record.type) + "关联单据流转中，无法禁用。");
+            }
+        }
+    }
+
+    private boolean hasOpenDocumentForProduct(Long productId) {
+        return documents.values().stream()
+            .filter(document -> document.status != DocumentStatus.APPROVED)
+            .flatMap(document -> document.items.stream())
+            .anyMatch(item -> item.productId.equals(productId));
+    }
+
+    private boolean hasOpenDocumentForWarehouse(Long warehouseId) {
+        return documents.values().stream()
+            .filter(document -> document.status != DocumentStatus.APPROVED)
+            .anyMatch(document -> warehouseId.equals(document.warehouseId) || warehouseId.equals(document.targetWarehouseId));
+    }
+
+    private boolean hasOpenDocumentForPartner(Long partnerId) {
+        return documents.values().stream()
+            .filter(document -> document.status != DocumentStatus.APPROVED)
+            .anyMatch(document -> partnerId.equals(document.partnerId));
     }
 
     public List<DocumentRecord> documents(String typeCode, Long userId) {
@@ -238,7 +338,7 @@ public class ErpStore {
         return createDocument(typeCode, userId, Map.of());
     }
 
-    public DocumentRecord createDocument(String typeCode, Long userId, Map<String, String> payload) {
+    public DocumentRecord createDocument(String typeCode, Long userId, Map<String, ?> payload) {
         var type = DocumentType.byCode(typeCode);
         var document = new DocumentRecord();
         document.id = ids.incrementAndGet();
@@ -248,12 +348,32 @@ public class ErpStore {
         document.creatorId = user.id;
         document.creatorName = user.name;
         fillDocumentParties(document);
-        applyDocumentPayload(document, payload == null ? Map.of() : payload);
-        document.items.add(document.type == DocumentType.STOCK_TRANSFER && payload != null && !payload.isEmpty()
-            ? transferItem(document, payload)
-            : defaultItem(document.warehouseId));
+        var data = payload == null ? Map.<String, Object>of() : payload;
+        applyDocumentPayload(document, data);
+        document.items.add(data.isEmpty() ? defaultItem(document) : documentItem(document, data));
         recalc(document);
         documents.put(document.id, document);
+        return document;
+    }
+
+    public DocumentRecord updateDocument(String typeCode, Long id, Long userId, Map<String, ?> payload) {
+        var document = getDocument(id);
+        if (document.type != DocumentType.byCode(typeCode)) {
+            throw new BusinessException("单据类型不匹配");
+        }
+        if (!document.creatorId.equals(userId)) {
+            throw new BusinessException("只能修改本人发起的单据");
+        }
+        if (document.status != DocumentStatus.DRAFT && document.status != DocumentStatus.REJECTED) {
+            throw new BusinessException("当前状态不可修改");
+        }
+        var data = payload == null ? Map.<String, Object>of() : payload;
+        fillDocumentParties(document);
+        applyDocumentPayload(document, data);
+        document.items.clear();
+        document.items.add(data.isEmpty() ? defaultItem(document) : documentItem(document, data));
+        document.operationTime = LocalDateTime.now();
+        recalc(document);
         return document;
     }
 
@@ -349,11 +469,50 @@ public class ErpStore {
             .toList();
     }
 
+    public List<Map<String, Object>> stockViews() {
+        recalcAvailable();
+        return stockList().stream()
+            .<Map<String, Object>>map(stock -> {
+                var warehouse = masterRecord("warehouse", stock.warehouseId);
+                var product = masterRecord("product", stock.productId);
+                var row = new LinkedHashMap<String, Object>();
+                row.put("warehouseId", stock.warehouseId);
+                row.put("warehouseCode", warehouse.code);
+                row.put("warehouseName", warehouse.name);
+                row.put("productId", stock.productId);
+                row.put("productCode", product.code);
+                row.put("productName", product.name);
+                row.put("categoryName", product.categoryName);
+                row.put("brandName", product.brandName);
+                row.put("unitName", product.unitName);
+                row.put("imageData", product.imageData);
+                row.put("actualQuantity", stock.actualQuantity);
+                row.put("availableQuantity", stock.availableQuantity);
+                return row;
+            })
+            .toList();
+    }
+
     public List<SettlementRecord> settlements(String direction) {
         return settlements.stream()
             .filter(record -> record.direction.equals(direction))
             .sorted(Comparator.comparing((SettlementRecord record) -> record.createTime).reversed())
             .toList();
+    }
+
+    public Map<String, Object> settlementDetail(String direction, Long id) {
+        var settlement = settlements.stream()
+            .filter(record -> record.id.equals(id) && record.direction.equals(direction))
+            .findFirst()
+            .orElseThrow(() -> new BusinessException("结算单不存在"));
+        var document = documents.values().stream()
+            .filter(item -> item.documentNo.equals(settlement.relatedDocumentNo))
+            .findFirst()
+            .orElseThrow(() -> new BusinessException("关联单据不存在"));
+        var detail = new LinkedHashMap<String, Object>();
+        detail.put("settlement", settlement);
+        detail.put("document", document);
+        return detail;
     }
 
     public List<MasterRecord> usersByRole(RoleCode role) {
@@ -388,7 +547,7 @@ public class ErpStore {
         document.partnerName = partner.name;
     }
 
-    private DocumentItem defaultItem(Long warehouseId) {
+    private DocumentItem defaultItem(DocumentRecord document) {
         var product = first("product");
         var item = new DocumentItem();
         item.productId = product.id;
@@ -398,31 +557,41 @@ public class ErpStore {
         item.brandName = product.brandName;
         item.unitName = product.unitName;
         item.quantity = BigDecimal.TEN;
-        item.price = product.purchasePrice == null || product.purchasePrice.compareTo(BigDecimal.ZERO) == 0 ? new BigDecimal("4200") : product.purchasePrice;
+        item.price = defaultPrice(document.type, product);
         item.amount = item.quantity.multiply(item.price).setScale(2, RoundingMode.HALF_UP);
-        item.availableQuantity = available(warehouseId, product.id);
-        item.remark = "正常调拨";
+        item.availableQuantity = available(document.warehouseId, product.id);
+        item.remark = document.type == DocumentType.STOCK_TRANSFER ? "正常调拨" : "";
         return item;
     }
 
-    private void applyDocumentPayload(DocumentRecord document, Map<String, String> payload) {
-        if (document.type != DocumentType.STOCK_TRANSFER || payload.isEmpty()) {
+    private void applyDocumentPayload(DocumentRecord document, Map<String, ?> payload) {
+        if (payload.isEmpty()) {
             return;
         }
-        var sourceWarehouse = masterRecord("warehouse", longRequired(payload, "warehouseId", "调出仓库必填，请重新输入。"));
-        var targetWarehouse = masterRecord("warehouse", longRequired(payload, "targetWarehouseId", "调入仓库必填，请重新输入。"));
-        if (sourceWarehouse.id.equals(targetWarehouse.id)) {
-            throw new BusinessException("调入仓库不能与调出仓库相同，请重新选择。");
+        var sourceWarehouse = payload.containsKey("warehouseId")
+            ? masterRecord("warehouse", longRequired(payload, "warehouseId", document.type == DocumentType.STOCK_TRANSFER ? "调出仓库必填，请重新输入。" : "仓库必填，请重新输入。"))
+            : masterRecord("warehouse", document.warehouseId);
+        setWarehouse(document, sourceWarehouse);
+        if (document.type == DocumentType.STOCK_TRANSFER) {
+            var targetWarehouse = masterRecord("warehouse", longRequired(payload, "targetWarehouseId", "调入仓库必填，请重新输入。"));
+            if (sourceWarehouse.id.equals(targetWarehouse.id)) {
+                throw new BusinessException("调入仓库不能与调出仓库相同，请重新选择。");
+            }
+            document.targetWarehouseId = targetWarehouse.id;
+            document.targetWarehouseCode = targetWarehouse.code;
+            document.targetWarehouseName = targetWarehouse.name;
+            return;
         }
-        document.warehouseId = sourceWarehouse.id;
-        document.warehouseCode = sourceWarehouse.code;
-        document.warehouseName = sourceWarehouse.name;
-        document.targetWarehouseId = targetWarehouse.id;
-        document.targetWarehouseCode = targetWarehouse.code;
-        document.targetWarehouseName = targetWarehouse.name;
+        if (payload.containsKey("relatedDocumentNo")) {
+            document.relatedDocumentNo = text(payload, "relatedDocumentNo");
+        }
+        if (payload.containsKey("partnerId")) {
+            var partnerType = document.type == DocumentType.PURCHASE_INBOUND || document.type == DocumentType.PURCHASE_RETURN ? "supplier" : "customer";
+            setPartner(document, masterRecord(partnerType, longRequired(payload, "partnerId", partnerLabel(document.type) + "必填，请重新输入。")));
+        }
     }
 
-    private DocumentItem transferItem(DocumentRecord document, Map<String, String> payload) {
+    private DocumentItem documentItem(DocumentRecord document, Map<String, ?> payload) {
         var product = masterRecord("product", longRequired(payload, "productId", "商品必填，请重新输入。"));
         var item = new DocumentItem();
         item.productId = product.id;
@@ -431,16 +600,64 @@ public class ErpStore {
         item.categoryName = product.categoryName;
         item.brandName = product.brandName;
         item.unitName = product.unitName;
-        item.quantity = quantityRequired(payload.get("quantity"), "调出数量必填，请重新输入。");
-        item.price = BigDecimal.ZERO;
-        item.amount = BigDecimal.ZERO;
+        item.quantity = quantityRequired(text(payload, "quantity"), quantityMessage(document.type));
+        item.price = document.type == DocumentType.STOCK_TRANSFER
+            ? BigDecimal.ZERO
+            : money(payload.containsKey("price") ? text(payload, "price") : defaultPrice(document.type, product).toString());
         item.availableQuantity = available(document.warehouseId, product.id);
-        item.remark = payload.getOrDefault("remark", "");
-        require(item.remark, "备注必填，请重新输入。");
-        if (item.quantity.compareTo(item.availableQuantity) > 0) {
-            throw new BusinessException("可用库存不足，请重新输入调出数量。");
+        item.remark = text(payload, "remark");
+        if (document.type == DocumentType.STOCK_TRANSFER) {
+            require(item.remark, "备注必填，请重新输入。");
+        }
+        if (requiresAvailableStock(document.type) && item.quantity.compareTo(item.availableQuantity) > 0) {
+            throw new BusinessException("可用库存不足，请重新输入" + stockQuantityLabel(document.type) + "。");
         }
         return item;
+    }
+
+    private void setWarehouse(DocumentRecord document, MasterRecord warehouse) {
+        document.warehouseId = warehouse.id;
+        document.warehouseCode = warehouse.code;
+        document.warehouseName = warehouse.name;
+    }
+
+    private void setPartner(DocumentRecord document, MasterRecord partner) {
+        document.partnerId = partner.id;
+        document.partnerCode = partner.code;
+        document.partnerName = partner.name;
+    }
+
+    private BigDecimal defaultPrice(DocumentType type, MasterRecord product) {
+        var price = type == DocumentType.SALES_OUTBOUND || type == DocumentType.SALES_RETURN
+            ? product.salePrice
+            : product.purchasePrice;
+        if (price == null || price.compareTo(BigDecimal.ZERO) == 0) {
+            return type == DocumentType.SALES_OUTBOUND || type == DocumentType.SALES_RETURN
+                ? new BigDecimal("5200")
+                : new BigDecimal("4200");
+        }
+        return price;
+    }
+
+    private boolean requiresAvailableStock(DocumentType type) {
+        return type == DocumentType.PURCHASE_RETURN || type == DocumentType.SALES_OUTBOUND || type == DocumentType.STOCK_TRANSFER;
+    }
+
+    private String stockQuantityLabel(DocumentType type) {
+        return switch (type) {
+            case PURCHASE_RETURN -> "采退数量";
+            case SALES_OUTBOUND -> "销售出库数量";
+            case STOCK_TRANSFER -> "调出数量";
+            default -> "数量";
+        };
+    }
+
+    private String quantityMessage(DocumentType type) {
+        return stockQuantityLabel(type) + "必填，请重新输入。";
+    }
+
+    private String partnerLabel(DocumentType type) {
+        return type == DocumentType.PURCHASE_INBOUND || type == DocumentType.PURCHASE_RETURN ? "供应商" : "客户";
     }
 
     private void recalc(DocumentRecord document) {
@@ -612,10 +829,40 @@ public class ErpStore {
         return new BigDecimal(value).setScale(2, RoundingMode.HALF_UP);
     }
 
-    private Long longRequired(Map<String, String> payload, String key, String message) {
-        var value = payload.get(key);
+    private boolean validMoney(String value) {
+        if (value == null || value.isBlank()) {
+            return false;
+        }
+        try {
+            return money(value).compareTo(BigDecimal.ZERO) > 0;
+        } catch (NumberFormatException ex) {
+            return false;
+        }
+    }
+
+    private String importValue(Map<String, String> row, String field, String... aliases) {
+        var value = row.get(field);
+        if (value != null) {
+            return value.trim();
+        }
+        for (var alias : aliases) {
+            value = row.get(alias);
+            if (value != null) {
+                return value.trim();
+            }
+        }
+        return "";
+    }
+
+    private Long longRequired(Map<String, ?> payload, String key, String message) {
+        var value = text(payload, key);
         require(value, message);
         return Long.valueOf(value);
+    }
+
+    private String text(Map<String, ?> payload, String key) {
+        var value = payload.get(key);
+        return value == null ? "" : String.valueOf(value);
     }
 
     private BigDecimal quantityRequired(String value, String message) {

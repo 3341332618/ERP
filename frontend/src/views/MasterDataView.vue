@@ -10,6 +10,8 @@
         <el-button type="primary" @click="load">查询</el-button>
         <el-button @click="reset">重置</el-button>
         <el-button type="success" @click="openCreate">新增</el-button>
+        <el-button v-if="type === 'product'" @click="openImport">批量导入</el-button>
+        <el-button v-if="type === 'product'" @click="downloadTemplate">下载模板</el-button>
       </div>
       <el-table :data="rows" border empty-text="暂无数据">
         <el-table-column type="index" label="序号" width="70" />
@@ -31,8 +33,8 @@
         <el-table-column v-if="type === 'product'" prop="categoryName" label="商品分类" />
         <el-table-column v-if="type === 'product'" prop="brandName" label="商品品牌" />
         <el-table-column v-if="type === 'product'" prop="unitName" label="商品单位" />
-        <el-table-column v-if="type === 'product'" prop="purchasePrice" label="建议采购价（元）" width="140" />
-        <el-table-column v-if="type === 'product'" prop="salePrice" label="建议零售价（元）" width="140" />
+        <el-table-column v-if="type === 'product'" prop="purchasePrice" label="建议采购价（元）" width="160" />
+        <el-table-column v-if="type === 'product'" prop="salePrice" label="建议零售价（元）" width="160" />
         <el-table-column v-if="type !== 'product'" prop="phone" label="联系电话" />
         <el-table-column v-if="type !== 'product'" prop="address" label="地址" min-width="160" />
         <el-table-column label="状态" width="90">
@@ -40,7 +42,7 @@
             <el-tag :type="row.status === 'ENABLED' ? 'success' : 'info'">{{ row.status === 'ENABLED' ? '启用' : '禁用' }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="210" fixed="right">
+        <el-table-column label="操作" width="180">
           <template #default="{ row }">
             <el-button text type="primary" @click="openEdit(row)">修改</el-button>
             <el-button text type="warning" @click="toggle(row)">{{ row.status === 'ENABLED' ? '禁用' : '启用' }}</el-button>
@@ -89,6 +91,33 @@
         </div>
       </template>
     </el-dialog>
+
+    <el-dialog v-model="importVisible" title="批量导入" width="680px">
+      <el-form label-width="100px">
+        <el-form-item label="上传文件">
+          <el-upload
+            :auto-upload="false"
+            :show-file-list="false"
+            accept=".csv,.txt,.xls,.xlsx"
+            :on-change="handleImportFileChange"
+          >
+            <el-button type="primary">上传文件</el-button>
+          </el-upload>
+        </el-form-item>
+        <el-form-item label="导入内容">
+          <el-input
+            v-model="importText"
+            type="textarea"
+            :rows="8"
+            placeholder="商品名称	商品分类	商品品牌	商品单位	建议采购价（元）	建议零售价（元）"
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="importVisible = false">取消</el-button>
+        <el-button type="primary" @click="saveImport">确定</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -97,15 +126,17 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { UploadFile } from 'element-plus'
-import { changeMasterStatus, createMaster, listMaster, updateMaster } from '../api'
+import { changeMasterStatus, createMaster, importProducts, listMaster, updateMaster } from '../api'
 import { readValidDocumentImage } from '../utils/imageUpload'
 
 const route = useRoute()
 const rows = ref<any[]>([])
 const dialogVisible = ref(false)
+const importVisible = ref(false)
 const editingId = ref<number | null>(null)
 const query = reactive({ keyword: '', status: '' })
 const form = reactive<Record<string, string>>({})
+const importText = ref('')
 
 const configs: Record<string, { name: string }> = {
   brand: { name: '商品品牌' },
@@ -172,6 +203,59 @@ async function toggle(row: any) {
   await ElMessageBox.confirm(`确认${next === 'ENABLED' ? '启用' : '禁用'}该数据？`, '操作确认', { confirmButtonText: '确定', cancelButtonText: '取消' })
   await changeMasterStatus(type.value, row.id, next)
   ElMessage.success('操作成功')
+  await load()
+}
+
+function openImport() {
+  importText.value = ''
+  importVisible.value = true
+}
+
+function downloadTemplate() {
+  const header = '商品名称\t商品分类\t商品品牌\t商品单位\t建议采购价（元）\t建议零售价（元）'
+  const example = '示例商品\t办公设备\t连想\t台\t1000\t1200'
+  const blob = new Blob([`${header}\n${example}`], { type: 'text/plain;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = '商品批量导入模板.txt'
+  link.click()
+  URL.revokeObjectURL(url)
+  ElMessage.success('模板下载成功')
+}
+
+async function handleImportFileChange(file: UploadFile) {
+  if (!file.raw) return
+  importText.value = await file.raw.text()
+}
+
+function parseImportRows() {
+  const lines = importText.value.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)
+  if (lines.length <= 1) return []
+  const delimiter = lines[0].includes('\t') ? '\t' : ','
+  const headers = lines[0].split(delimiter).map((item) => item.trim())
+  return lines.slice(1).map((line) => {
+    const values = line.split(delimiter).map((item) => item.trim())
+    const row: Record<string, string> = {}
+    headers.forEach((header, index) => {
+      row[header] = values[index] || ''
+    })
+    return {
+      name: row['商品名称'] || row.name || '',
+      categoryName: row['商品分类'] || row.categoryName || '',
+      brandName: row['商品品牌'] || row.brandName || '',
+      unitName: row['商品单位'] || row.unitName || '',
+      purchasePrice: row['建议采购价（元）'] || row.purchasePrice || '',
+      salePrice: row['建议零售价（元）'] || row.salePrice || ''
+    }
+  })
+}
+
+async function saveImport() {
+  const importRows = parseImportRows()
+  await importProducts(importRows)
+  ElMessage.success('导入成功')
+  importVisible.value = false
   await load()
 }
 

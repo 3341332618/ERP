@@ -61,6 +61,10 @@ export function createDocument(type: string, data: Record<string, string> = {}) 
   return http.post(`/documents/${type}`, data) as Promise<any>
 }
 
+export function updateDocument(type: string, id: number, data: Record<string, string> = {}) {
+  return http.put(`/documents/${type}/${id}`, data) as Promise<any>
+}
+
 export function submitDocument(type: string, id: number) {
   return http.post(`/documents/${type}/${id}/submit`) as Promise<any>
 }
@@ -87,4 +91,12 @@ export function rejectAudit(id: number, reason: string) {
 
 export function listSettlement(direction: string) {
   return http.get(`/settlement/${direction}`) as Promise<any[]>
+}
+
+export function settlementDetail(direction: string, id: number) {
+  return http.get(`/settlement/${direction}/${id}`) as Promise<any>
+}
+
+export function importProducts(rows: Record<string, string>[]) {
+  return http.post('/masterdata/product/import', rows) as Promise<any[]>
 }

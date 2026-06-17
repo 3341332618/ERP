@@ -30,7 +30,14 @@ router.beforeEach(async (to) => {
   const auth = useAuthStore()
   if (to.path === '/login') return true
   if (!auth.token) return '/login'
-  if (!auth.user) await auth.loadCurrentUser()
+  if (!auth.user) {
+    try {
+      await auth.loadCurrentUser()
+    } catch {
+      auth.logout()
+      return '/login'
+    }
+  }
   return true
 })
 

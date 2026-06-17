@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -37,6 +38,11 @@ public class MasterDataController {
         return ApiResult.success(store.createMaster(type, payload));
     }
 
+    @PostMapping("/product/import")
+    public ApiResult<?> importProducts(@RequestBody List<Map<String, String>> rows) {
+        return ApiResult.success(store.importProducts(rows));
+    }
+
     @PutMapping("/{type}/{id}")
     public ApiResult<?> update(@PathVariable String type, @PathVariable Long id, @RequestBody Map<String, String> payload) {
         return ApiResult.success(store.updateMaster(type, id, payload));
@@ -52,4 +58,3 @@ public class MasterDataController {
         return ApiResult.success(store.usersByRole(RoleCode.WAREHOUSE_STAFF));
     }
 }
-

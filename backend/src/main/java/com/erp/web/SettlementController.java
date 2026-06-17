@@ -20,4 +20,9 @@ public class SettlementController {
     public ApiResult<?> list(@PathVariable String direction) {
         return ApiResult.success(store.settlements(direction));
     }
+
+    @GetMapping("/{direction}/{id}")
+    public ApiResult<?> detail(@PathVariable String direction, @PathVariable Long id) {
+        return ApiResult.success(store.settlementDetail(direction, id));
+    }
 }
