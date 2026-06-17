@@ -110,39 +110,63 @@ public class ErpStore {
     public List<MenuNode> menus(RoleCode role) {
         var menus = new ArrayList<MenuNode>();
         if (role == RoleCode.ADMIN) {
-            menus.add(new MenuNode("基础信息管理", "/master/brand")
-                .add(new MenuNode("商品品牌", "/master/brand"))
-                .add(new MenuNode("商品分类", "/master/category"))
-                .add(new MenuNode("商品单位", "/master/unit"))
-                .add(new MenuNode("商品管理", "/master/product"))
-                .add(new MenuNode("仓库信息", "/master/warehouse"))
-                .add(new MenuNode("客户信息", "/master/customer"))
-                .add(new MenuNode("供应商信息", "/master/supplier")));
+            menus.add(baseInfoMenu());
+            menus.add(purchaseMenu());
+            menus.add(inventoryMenu());
+            menus.add(salesMenu());
+            menus.add(settlementMenu());
         }
         if (role == RoleCode.PURCHASE_MANAGER || role == RoleCode.PURCHASE_STAFF) {
-            menus.add(new MenuNode("采购管理", "/purchase/inbound")
-                .add(new MenuNode("采购入库", "/purchase/inbound"))
-                .add(new MenuNode("采购退货", "/purchase/return")));
+            menus.add(purchaseMenu());
         }
         if (role == RoleCode.WAREHOUSE_MANAGER || role == RoleCode.WAREHOUSE_STAFF) {
-            menus.add(new MenuNode("库存管理", "/inventory/stock")
-                .add(new MenuNode("库存分布", "/inventory/stock"))
-                .add(new MenuNode("入库审核", "/inventory/inbound-audit"))
-                .add(new MenuNode("出库审核", "/inventory/outbound-audit"))
-                .add(new MenuNode("库存调拨", "/inventory/transfer")));
+            menus.add(inventoryMenu());
         }
         if (role == RoleCode.SALES_MANAGER || role == RoleCode.SALES_STAFF) {
-            menus.add(new MenuNode("销售管理", "/sales/outbound")
-                .add(new MenuNode("销售出库", "/sales/outbound"))
-                .add(new MenuNode("销售退货", "/sales/return")));
+            menus.add(salesMenu());
         }
         if (role == RoleCode.SETTLEMENT_MANAGER) {
-            menus.add(new MenuNode("结算管理", "/settlement/income")
-                .add(new MenuNode("收入结算", "/settlement/income"))
-                .add(new MenuNode("支出结算", "/settlement/expense")));
+            menus.add(settlementMenu());
         }
         menus.add(new MenuNode("个人中心", "/profile"));
         return menus;
+    }
+
+    private MenuNode baseInfoMenu() {
+        return new MenuNode("基础信息管理", "/master/brand")
+            .add(new MenuNode("商品品牌", "/master/brand"))
+            .add(new MenuNode("商品分类", "/master/category"))
+            .add(new MenuNode("商品单位", "/master/unit"))
+            .add(new MenuNode("商品管理", "/master/product"))
+            .add(new MenuNode("仓库信息", "/master/warehouse"))
+            .add(new MenuNode("客户信息", "/master/customer"))
+            .add(new MenuNode("供应商信息", "/master/supplier"));
+    }
+
+    private MenuNode purchaseMenu() {
+        return new MenuNode("采购管理", "/purchase/inbound")
+            .add(new MenuNode("采购入库", "/purchase/inbound"))
+            .add(new MenuNode("采购退货", "/purchase/return"));
+    }
+
+    private MenuNode inventoryMenu() {
+        return new MenuNode("库存管理", "/inventory/stock")
+            .add(new MenuNode("库存分布", "/inventory/stock"))
+            .add(new MenuNode("入库审核", "/inventory/inbound-audit"))
+            .add(new MenuNode("出库审核", "/inventory/outbound-audit"))
+            .add(new MenuNode("库存调拨", "/inventory/transfer"));
+    }
+
+    private MenuNode salesMenu() {
+        return new MenuNode("销售管理", "/sales/outbound")
+            .add(new MenuNode("销售出库", "/sales/outbound"))
+            .add(new MenuNode("销售退货", "/sales/return"));
+    }
+
+    private MenuNode settlementMenu() {
+        return new MenuNode("结算管理", "/settlement/income")
+            .add(new MenuNode("收入结算", "/settlement/income"))
+            .add(new MenuNode("支出结算", "/settlement/expense"));
     }
 
     public List<Message> messages(Long userId) {

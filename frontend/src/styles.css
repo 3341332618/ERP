@@ -1,7 +1,11 @@
 :root {
   font-family: "Microsoft YaHei", "PingFang SC", Arial, sans-serif;
-  color: #1f2937;
-  background: #f4f6f9;
+  color: #1f2d3d;
+  background: #f5f7fa;
+  --el-color-primary: #1296db;
+  --el-color-primary-light-3: #49aef0;
+  --el-color-primary-dark-2: #0b7fc3;
+  --el-border-radius-base: 2px;
 }
 
 * {
@@ -10,24 +14,26 @@
 
 body {
   margin: 0;
+  font-size: 13px;
 }
 
 .page {
-  padding: 16px;
+  padding: 22px 18px;
 }
 
 .toolbar {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-bottom: 12px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
 }
 
 .table-panel {
   background: #fff;
-  border: 1px solid #e5e7eb;
-  border-radius: 6px;
-  padding: 14px;
+  border: 1px solid #e8edf3;
+  border-radius: 4px;
+  padding: 16px 18px 18px;
 }
 
 .dialog-footer {
@@ -36,3 +42,106 @@ body {
   gap: 8px;
 }
 
+.el-main {
+  --el-main-padding: 0;
+  background: #f5f7fa;
+}
+
+.el-menu {
+  border-right: 0;
+}
+
+.el-menu-item,
+.el-sub-menu__title {
+  height: 50px;
+  font-size: 14px;
+}
+
+.el-menu-item.is-active {
+  background: #142b3c !important;
+}
+
+.el-sub-menu .el-menu-item {
+  min-width: 0;
+  height: 48px;
+  padding-left: 56px !important;
+  background: #152f42 !important;
+}
+
+.el-sub-menu .el-menu-item.is-active {
+  color: #18a3f7 !important;
+}
+
+.el-button {
+  min-width: 72px;
+  height: 30px;
+  padding: 0 14px;
+  font-size: 12px;
+  border-radius: 2px;
+}
+
+.el-button.is-text {
+  min-width: auto;
+  height: 24px;
+  padding: 0 6px;
+}
+
+.el-input,
+.el-select {
+  --el-input-height: 32px;
+}
+
+.el-input__wrapper,
+.el-select__wrapper {
+  border-radius: 2px;
+}
+
+.el-table {
+  --el-table-header-bg-color: #f5f7fa;
+  --el-table-header-text-color: #1f2d3d;
+  --el-table-text-color: #22313f;
+  --el-table-row-hover-bg-color: #f8fbff;
+  font-size: 12px;
+}
+
+.el-table th.el-table__cell {
+  height: 44px;
+  font-weight: 700;
+}
+
+.el-table td.el-table__cell {
+  height: 48px;
+}
+
+.el-dialog {
+  border-radius: 2px;
+}
+
+.el-dialog__header {
+  padding: 18px 22px 8px;
+  margin-right: 0;
+}
+
+.el-dialog__title {
+  font-size: 16px;
+  color: #1f2d3d;
+}
+
+.el-dialog__body {
+  padding: 18px 22px;
+}
+
+.el-dialog__footer {
+  padding: 0 22px 18px;
+}
+
+.el-descriptions__label {
+  font-weight: 700;
+}
+
+.el-tag {
+  min-width: 42px;
+  justify-content: center;
+  border-radius: 2px;
+  font-weight: 600;
+}

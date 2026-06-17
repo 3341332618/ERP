@@ -1,8 +1,11 @@
 <template>
   <el-container class="layout">
-    <el-aside width="230px" class="aside">
-      <div class="logo">ERP管理平台</div>
-      <el-menu router :default-active="$route.path" background-color="#1f2937" text-color="#d1d5db" active-text-color="#ffffff">
+    <el-aside width="200px" class="aside">
+      <div class="logo">
+        <span class="brand-mark">企</span>
+        <span>ERP管理平台</span>
+      </div>
+      <el-menu router :default-active="$route.path" background-color="#21384a" text-color="#d1d5db" active-text-color="#ffffff">
         <el-menu-item index="/home">
           <el-icon><House /></el-icon>
           <span>首页看板</span>
@@ -19,11 +22,10 @@
       </el-menu>
     </el-aside>
     <el-container>
-      <el-header class="header">
+      <el-header class="header" height="52px">
         <div class="breadcrumb">
           <el-breadcrumb separator="/">
-            <el-breadcrumb-item>当前位置</el-breadcrumb-item>
-            <el-breadcrumb-item>{{ routeLabel }}</el-breadcrumb-item>
+            <el-breadcrumb-item v-for="item in breadcrumbNodes" :key="item">{{ item }}</el-breadcrumb-item>
           </el-breadcrumb>
         </div>
         <div class="top-actions">
@@ -39,7 +41,10 @@
             <div v-for="item in messages" :key="item.id" class="message-item">{{ item.content }}</div>
           </el-popover>
           <el-dropdown @command="handleCommand">
-            <span class="user-entry">{{ auth.user?.name }}（{{ auth.user?.roleName }}）</span>
+            <span class="user-entry">
+              <el-avatar :size="34" :src="auth.user?.avatar || undefined">{{ avatarFallback }}</el-avatar>
+              <span>{{ auth.user?.name }}（{{ auth.user?.roleName }}）</span>
+            </span>
             <template #dropdown>
               <el-dropdown-menu>
                 <el-dropdown-item command="profile">个人中心</el-dropdown-item>
@@ -49,6 +54,9 @@
           </el-dropdown>
         </div>
       </el-header>
+      <div class="tab-strip">
+        <div class="tab-item">{{ routeLabel }}</div>
+      </div>
       <el-main>
         <router-view />
       </el-main>
@@ -68,7 +76,28 @@ const router = useRouter()
 const route = useRoute()
 const messages = ref<any[]>([])
 
-const routeLabel = computed(() => String(route.name || '首页看板'))
+const matchedMenu = computed(() => {
+  for (const menu of auth.menus) {
+    const child = menu.children?.find((item) => item.path === route.path)
+    if (child) {
+      return { parent: menu.title, child: child.title }
+    }
+    if (menu.path === route.path) {
+      return { parent: menu.title, child: menu.title }
+    }
+  }
+  return null
+})
+const routeLabel = computed(() => matchedMenu.value?.child || String(route.name || '首页看板'))
+const breadcrumbNodes = computed(() => {
+  if (matchedMenu.value) {
+    return matchedMenu.value.parent === matchedMenu.value.child
+      ? [matchedMenu.value.child]
+      : [matchedMenu.value.parent, matchedMenu.value.child]
+  }
+  return [String(route.name || '首页看板')]
+})
+const avatarFallback = computed(() => auth.user?.name?.slice(0, 1) || '用')
 
 async function loadMessages() {
   messages.value = await fetchMessages()
@@ -89,17 +118,31 @@ function handleCommand(command: string) {
 }
 
 .aside {
-  background: #1f2937;
+  background: #21384a;
+  box-shadow: 2px 0 8px rgba(15, 23, 42, 0.18);
 }
 
 .logo {
-  height: 56px;
+  height: 52px;
   display: flex;
   align-items: center;
+  gap: 12px;
   padding: 0 18px;
   color: #fff;
   font-weight: 700;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.brand-mark {
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #ffffff;
+  color: #0f8fe8;
+  font-size: 11px;
+  font-weight: 800;
 }
 
 .header {
@@ -108,6 +151,7 @@ function handleCommand(command: string) {
   justify-content: space-between;
   background: #fff;
   border-bottom: 1px solid #e5e7eb;
+  padding: 0 18px;
 }
 
 .top-actions {
@@ -117,8 +161,33 @@ function handleCommand(command: string) {
 }
 
 .user-entry {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   cursor: pointer;
   color: #374151;
+}
+
+.tab-strip {
+  height: 32px;
+  display: flex;
+  align-items: flex-end;
+  padding-left: 16px;
+  background: #fff;
+  border-bottom: 1px solid #d8dee6;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+}
+
+.tab-item {
+  height: 28px;
+  min-width: 98px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 18px;
+  background: #1296db;
+  color: #fff;
+  font-size: 13px;
 }
 
 .message-title {
@@ -132,4 +201,3 @@ function handleCommand(command: string) {
   font-size: 13px;
 }
 </style>
-

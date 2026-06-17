@@ -2,6 +2,7 @@ package com.erp;
 
 import com.erp.store.ErpStore;
 import com.erp.common.BusinessException;
+import com.erp.domain.ErpModels.RoleCode;
 import com.erp.domain.ErpModels.Status;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -18,6 +19,22 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class ErpCoreFlowIntegrationTest {
     @Autowired
     ErpStore store;
+
+    @Test
+    void adminMenuIncludesAllBusinessModules() {
+        var adminMenus = store.menus(RoleCode.ADMIN);
+
+        assertThat(adminMenus)
+            .extracting(menu -> menu.title)
+            .containsExactly("基础信息管理", "采购管理", "库存管理", "销售管理", "结算管理", "个人中心");
+        assertThat(adminMenus.stream()
+            .filter(menu -> "库存管理".equals(menu.title))
+            .findFirst()
+            .orElseThrow()
+            .children)
+            .extracting(menu -> menu.title)
+            .contains("库存分布", "库存调拨");
+    }
 
     @Test
     void purchaseApprovalCreatesStockAndExpenseSettlement() {

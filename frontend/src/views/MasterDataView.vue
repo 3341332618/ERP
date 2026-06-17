@@ -3,6 +3,12 @@
     <div class="table-panel">
       <div class="toolbar">
         <el-input v-model="query.keyword" :placeholder="`请输入${config.name}编号/名称查询`" clearable style="width: 260px" />
+        <template v-if="type === 'product'">
+          <span class="filter-label">商品分类</span>
+          <el-input v-model="query.categoryName" placeholder="请输入商品分类" clearable style="width: 170px" />
+          <span class="filter-label">商品品牌</span>
+          <el-input v-model="query.brandName" placeholder="请输入商品品牌" clearable style="width: 170px" />
+        </template>
         <el-select v-model="query.status" placeholder="请选择状态" clearable style="width: 150px">
           <el-option label="启用" value="ENABLED" />
           <el-option label="禁用" value="DISABLED" />
@@ -13,7 +19,7 @@
         <el-button v-if="type === 'product'" @click="openImport">批量导入</el-button>
         <el-button v-if="type === 'product'" @click="downloadTemplate">下载模板</el-button>
       </div>
-      <el-table :data="rows" border empty-text="暂无数据">
+      <el-table :data="pagedRows" border empty-text="暂无数据">
         <el-table-column type="index" label="序号" width="70" />
         <el-table-column prop="code" label="编号" min-width="130" />
         <el-table-column v-if="type === 'product'" label="商品图片" width="100">
@@ -49,6 +55,17 @@
           </template>
         </el-table-column>
       </el-table>
+      <div class="pagination-bar">
+        <span>共 {{ filteredRows.length }} 条</span>
+        <el-pagination
+          v-model:current-page="currentPage"
+          v-model:page-size="pageSize"
+          :page-sizes="[10, 20, 30, 50]"
+          layout="sizes, prev, pager, next, jumper"
+          :total="filteredRows.length"
+          small
+        />
+      </div>
     </div>
 
     <el-dialog v-model="dialogVisible" :title="dialogTitle" width="520px">
@@ -134,9 +151,11 @@ const rows = ref<any[]>([])
 const dialogVisible = ref(false)
 const importVisible = ref(false)
 const editingId = ref<number | null>(null)
-const query = reactive({ keyword: '', status: '' })
+const query = reactive({ keyword: '', status: '', categoryName: '', brandName: '' })
 const form = reactive<Record<string, string>>({})
 const importText = ref('')
+const currentPage = ref(1)
+const pageSize = ref(10)
 
 const configs: Record<string, { name: string }> = {
   brand: { name: '商品品牌' },
@@ -151,14 +170,26 @@ const configs: Record<string, { name: string }> = {
 const type = computed(() => String(route.params.type))
 const config = computed(() => configs[type.value] || { name: '资料' })
 const dialogTitle = computed(() => `${editingId.value ? '修改' : '新增'}${config.value.name}`)
+const filteredRows = computed(() => rows.value.filter((row) => {
+  const matchCategory = type.value !== 'product' || !query.categoryName || String(row.categoryName || '').includes(query.categoryName)
+  const matchBrand = type.value !== 'product' || !query.brandName || String(row.brandName || '').includes(query.brandName)
+  return matchCategory && matchBrand
+}))
+const pagedRows = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value
+  return filteredRows.value.slice(start, start + pageSize.value)
+})
 
 async function load() {
   rows.value = await listMaster(type.value, query)
+  currentPage.value = 1
 }
 
 function reset() {
   query.keyword = ''
   query.status = ''
+  query.categoryName = ''
+  query.brandName = ''
   load()
 }
 
@@ -260,6 +291,9 @@ async function saveImport() {
 }
 
 watch(type, load)
+watch([() => query.categoryName, () => query.brandName, pageSize], () => {
+  currentPage.value = 1
+})
 onMounted(load)
 </script>
 
@@ -295,5 +329,19 @@ onMounted(load)
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+.filter-label {
+  font-weight: 700;
+  color: #1f2d3d;
+}
+
+.pagination-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 14px;
+  padding-top: 14px;
+  color: #606266;
 }
 </style>
