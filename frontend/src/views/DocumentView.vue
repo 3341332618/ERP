@@ -7,7 +7,7 @@
         <el-button @click="keyword = ''; load()">重置</el-button>
         <el-button type="success" @click="openCreate">新增{{ config.name }}单</el-button>
       </div>
-      <el-table :data="filteredRows" border empty-text="暂无数据">
+      <el-table :data="pagedRows" border empty-text="暂无数据">
         <el-table-column type="index" label="序号" width="70" />
         <el-table-column prop="documentNo" :label="`${config.name}单号`" min-width="190" />
         <el-table-column prop="warehouseCode" label="仓库编号" />
@@ -33,10 +33,21 @@
           </template>
         </el-table-column>
       </el-table>
+      <div class="pagination-bar">
+        <span>共 {{ filteredRows.length }} 条</span>
+        <el-pagination
+          v-model:current-page="currentPage"
+          v-model:page-size="pageSize"
+          :page-sizes="[10, 20, 30, 50]"
+          layout="sizes, prev, pager, next, jumper"
+          :total="filteredRows.length"
+          small
+        />
+      </div>
     </div>
 
     <el-dialog v-model="detailVisible" :title="`查看${config.name}单`" width="920px">
-      <h3>基础信息</h3>
+      <div class="dialog-section-title">基础信息</div>
       <el-descriptions :column="2" border>
         <el-descriptions-item label="单据号">{{ current?.documentNo }}</el-descriptions-item>
         <el-descriptions-item label="审核状态">{{ statusLabel(current?.status) }}</el-descriptions-item>
@@ -49,7 +60,7 @@
         <el-descriptions-item label="审核时间">{{ current?.auditTime || '暂无' }}</el-descriptions-item>
       </el-descriptions>
 
-      <h3>商品明细</h3>
+      <div class="dialog-section-title">商品明细</div>
       <el-table :data="current?.items || []" border empty-text="暂无数据">
         <el-table-column type="index" label="序号" width="70" />
         <el-table-column prop="productCode" label="商品编号" />
@@ -64,7 +75,7 @@
         <el-table-column prop="remark" label="备注" />
       </el-table>
 
-      <h3>操作记录</h3>
+      <div class="dialog-section-title">操作记录</div>
       <el-table :data="operationRecords" border empty-text="暂无操作记录">
         <el-table-column prop="time" label="操作时间" />
         <el-table-column prop="operator" label="操作人" />
@@ -73,26 +84,26 @@
     </el-dialog>
 
     <el-dialog v-model="formVisible" :title="formTitle" width="720px">
-      <el-form :model="form" label-width="130px">
-        <el-form-item :label="isTransfer ? '调出仓库标识' : '仓库标识'">
+      <el-form :model="form" :rules="formRules" label-width="130px">
+        <el-form-item :label="isTransfer ? '调出仓库标识' : '仓库标识'" prop="warehouseId">
           <el-input v-model="form.warehouseId" :placeholder="isTransfer ? '请输入调出仓库标识' : '请输入仓库标识'" />
         </el-form-item>
-        <el-form-item v-if="isTransfer" label="调入仓库标识">
+        <el-form-item v-if="isTransfer" label="调入仓库标识" prop="targetWarehouseId">
           <el-input v-model="form.targetWarehouseId" placeholder="请输入调入仓库标识" />
         </el-form-item>
-        <el-form-item v-if="!isTransfer" :label="config.partnerIdLabel">
+        <el-form-item v-if="!isTransfer" :label="config.partnerIdLabel" prop="partnerId">
           <el-input v-model="form.partnerId" :placeholder="`请输入${config.partnerIdLabel}`" />
         </el-form-item>
         <el-form-item v-if="config.showRelated" label="关联单据号">
           <el-input v-model="form.relatedDocumentNo" :placeholder="`请输入${config.relatedLabel}`" />
         </el-form-item>
-        <el-form-item label="商品标识">
+        <el-form-item label="商品标识" prop="productId">
           <el-input v-model="form.productId" placeholder="请输入商品标识" />
         </el-form-item>
-        <el-form-item :label="config.quantityLabel">
+        <el-form-item :label="config.quantityLabel" prop="quantity">
           <el-input v-model="form.quantity" :placeholder="`请输入${config.quantityLabel}`" />
         </el-form-item>
-        <el-form-item v-if="!isTransfer" :label="config.priceLabel">
+        <el-form-item v-if="!isTransfer" :label="config.priceLabel" prop="price">
           <el-input v-model="form.price" :placeholder="`请输入${config.priceLabel}`" />
         </el-form-item>
         <el-form-item label="备注">
@@ -100,8 +111,10 @@
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="formVisible = false">取消</el-button>
-        <el-button type="primary" @click="saveDocument">保存</el-button>
+        <div class="dialog-footer">
+          <el-button @click="formVisible = false">取消</el-button>
+          <el-button type="primary" @click="saveDocument">保存</el-button>
+        </div>
       </template>
     </el-dialog>
   </div>
@@ -110,7 +123,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage, ElMessageBox, type FormRules } from 'element-plus'
 import { createDocument, deleteDocument, listDocuments, submitDocument, updateDocument } from '../api'
 
 const route = useRoute()
@@ -121,6 +134,8 @@ const formVisible = ref(false)
 const editingId = ref<number | null>(null)
 const current = ref<any>()
 const form = reactive<Record<string, string>>({})
+const currentPage = ref(1)
+const pageSize = ref(10)
 const isTransfer = computed(() => route.path === '/inventory/transfer')
 
 const config = computed(() => {
@@ -201,7 +216,19 @@ const config = computed(() => {
 })
 const keywordPlaceholder = computed(() => isTransfer.value ? '请输入库存调拨单号查询' : `请输入${config.value.name}单号查询`)
 const filteredRows = computed(() => rows.value.filter((row) => !keyword.value || row.documentNo.includes(keyword.value)))
+const pagedRows = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value
+  return filteredRows.value.slice(start, start + pageSize.value)
+})
 const formTitle = computed(() => `${editingId.value ? '修改' : '新增'}${config.value.name}单`)
+const formRules = computed<FormRules>(() => ({
+  warehouseId: [{ required: true, message: isTransfer.value ? '调出仓库必填，请重新输入。' : '仓库必填，请重新输入。', trigger: 'blur' }],
+  targetWarehouseId: [{ required: isTransfer.value, message: '调入仓库必填，请重新输入。', trigger: 'blur' }],
+  partnerId: [{ required: !isTransfer.value, message: `${config.value.partnerIdLabel}必填，请重新输入。`, trigger: 'blur' }],
+  productId: [{ required: true, message: '商品必填，请重新输入。', trigger: 'blur' }],
+  quantity: [{ required: true, message: `${config.value.quantityLabel}必填，请重新输入。`, trigger: 'blur' }],
+  price: [{ required: !isTransfer.value, message: `${config.value.priceLabel}必填，请重新输入。`, trigger: 'blur' }]
+}))
 const operationRecords = computed(() => {
   if (!current.value) return []
   const records = [
@@ -237,6 +264,7 @@ function resetForm() {
 
 async function load() {
   rows.value = await listDocuments(config.value.api)
+  currentPage.value = 1
 }
 
 function openCreate() {
@@ -274,14 +302,14 @@ async function saveDocument() {
 }
 
 async function submit(row: any) {
-  await ElMessageBox.confirm('确认提交该单据？', '提交确认', { confirmButtonText: '确定', cancelButtonText: '取消' })
+  await ElMessageBox.confirm('确认提交该单据？', '提交确认', { confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning' })
   await submitDocument(config.value.api, row.id)
   ElMessage.success('提交成功')
   await load()
 }
 
 async function remove(row: any) {
-  await ElMessageBox.confirm('确认删除该单据？', '删除确认', { confirmButtonText: '确定', cancelButtonText: '取消' })
+  await ElMessageBox.confirm('确认删除该单据？', '删除确认', { confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning' })
   await deleteDocument(config.value.api, row.id)
   ElMessage.success('删除成功')
   await load()
@@ -293,14 +321,19 @@ function view(row: any) {
 }
 
 watch(() => route.fullPath, load)
+watch([keyword, pageSize], () => {
+  currentPage.value = 1
+})
 onMounted(load)
 </script>
 
 <style scoped>
-h3 {
-  margin: 16px 0 10px;
-  font-size: 15px;
-  font-weight: 700;
-  color: #1f2937;
+.pagination-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 14px;
+  padding-top: 14px;
+  color: #606266;
 }
 </style>

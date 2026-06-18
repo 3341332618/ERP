@@ -9,7 +9,7 @@
         <el-button type="primary" @click="load">查询</el-button>
         <el-button @click="reset">重置</el-button>
       </div>
-      <el-table :data="filteredRows" border empty-text="暂无数据">
+      <el-table :data="pagedRows" border empty-text="暂无数据">
         <el-table-column type="index" label="序号" width="70" />
         <el-table-column prop="settlementNo" :label="`${title}单号`" min-width="190" />
         <el-table-column prop="documentType" label="单据类型" />
@@ -22,6 +22,17 @@
           </template>
         </el-table-column>
       </el-table>
+      <div class="pagination-bar">
+        <span>共 {{ filteredRows.length }} 条</span>
+        <el-pagination
+          v-model:current-page="currentPage"
+          v-model:page-size="pageSize"
+          :page-sizes="[10, 20, 30, 50]"
+          layout="sizes, prev, pager, next, jumper"
+          :total="filteredRows.length"
+          small
+        />
+      </div>
     </div>
 
     <el-dialog v-model="detailVisible" :title="`查看${title}单`" width="920px">
@@ -37,7 +48,7 @@
     </el-dialog>
 
     <el-dialog v-model="relatedVisible" :title="`查看${detail?.document?.type?.label || '关联'}单`" width="920px">
-      <h3>基础信息</h3>
+      <div class="dialog-section-title">基础信息</div>
       <el-descriptions :column="2" border>
         <el-descriptions-item label="单据号">{{ detail?.document?.documentNo }}</el-descriptions-item>
         <el-descriptions-item label="审核状态">审核通过</el-descriptions-item>
@@ -46,7 +57,7 @@
         <el-descriptions-item label="发起人">{{ detail?.document?.creatorName }}</el-descriptions-item>
         <el-descriptions-item label="审核人">{{ detail?.document?.auditorName }}</el-descriptions-item>
       </el-descriptions>
-      <h3>商品明细</h3>
+      <div class="dialog-section-title">商品明细</div>
       <el-table :data="detail?.document?.items || []" border empty-text="暂无数据">
         <el-table-column type="index" label="序号" width="70" />
         <el-table-column prop="productCode" label="商品编号" />
@@ -58,7 +69,7 @@
         <el-table-column prop="price" label="实际单价（元）" />
         <el-table-column prop="amount" label="结算金额（元）" />
       </el-table>
-      <h3>操作记录</h3>
+      <div class="dialog-section-title">操作记录</div>
       <el-table :data="relatedRecords" border empty-text="暂无操作记录">
         <el-table-column prop="time" label="操作时间" />
         <el-table-column prop="operator" label="操作人" />
@@ -77,6 +88,8 @@ const route = useRoute()
 const rows = ref<any[]>([])
 const keyword = ref('')
 const documentType = ref('')
+const currentPage = ref(1)
+const pageSize = ref(10)
 const detailVisible = ref(false)
 const relatedVisible = ref(false)
 const detail = ref<any>()
@@ -88,6 +101,10 @@ const filteredRows = computed(() => rows.value.filter((row) => {
   const matchType = !documentType.value || row.documentType === documentType.value
   return matchNo && matchType
 }))
+const pagedRows = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value
+  return filteredRows.value.slice(start, start + pageSize.value)
+})
 const relatedRecords = computed(() => {
   const document = detail.value?.document
   if (!document) return []
@@ -99,6 +116,7 @@ const relatedRecords = computed(() => {
 
 async function load() {
   rows.value = await listSettlement(direction.value)
+  currentPage.value = 1
 }
 
 function reset() {
@@ -114,14 +132,19 @@ async function openDetail(row: any) {
 }
 
 watch(direction, load)
+watch([keyword, documentType, pageSize], () => {
+  currentPage.value = 1
+})
 onMounted(load)
 </script>
 
 <style scoped>
-h3 {
-  margin: 16px 0 10px;
-  font-size: 15px;
-  font-weight: 700;
-  color: #1f2937;
+.pagination-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 14px;
+  padding-top: 14px;
+  color: #606266;
 }
 </style>

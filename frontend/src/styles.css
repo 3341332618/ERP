@@ -145,3 +145,82 @@ body {
   border-radius: 2px;
   font-weight: 600;
 }
+
+.el-form-item.is-required .el-form-item__label::before {
+  color: #f56c6c;
+  margin-right: 4px;
+}
+
+.el-message-box {
+  width: 416px;
+  border-radius: 2px;
+  padding-bottom: 18px;
+}
+
+.el-message-box__header {
+  padding: 18px 20px 8px;
+}
+
+.el-message-box__title {
+  font-size: 16px;
+  color: #1f2d3d;
+}
+
+.el-message-box__content {
+  min-height: 46px;
+  padding: 12px 20px;
+}
+
+.el-message-box__status.el-message-box-icon--warning {
+  color: #ffb400;
+}
+
+.el-message-box__btns {
+  padding: 0 20px;
+}
+
+.dialog-section-title {
+  margin: 18px 0 10px;
+  font-size: 15px;
+  font-weight: 700;
+  color: #1f2d3d;
+}
+
+.doc-upload-drop {
+  width: 100%;
+  min-height: 180px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed #d7dce5;
+  border-radius: 2px;
+  background: #fff;
+}
+
+.doc-upload-drop:hover {
+  border-color: #1296db;
+}
+
+.doc-upload-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  color: #606266;
+}
+
+.doc-upload-icon {
+  font-size: 46px;
+  color: #c0c6cf;
+  line-height: 1;
+}
+
+.doc-upload-link {
+  color: #1296db;
+}
+
+.dialog-tip {
+  margin-top: 10px;
+  color: #f56c6c;
+  font-size: 12px;
+}

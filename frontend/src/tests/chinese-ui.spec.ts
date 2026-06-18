@@ -79,4 +79,22 @@ describe('中文界面文案', () => {
     expect(documentView).toContain("api: 'stock-transfer'")
     expect(documentView).toContain('请输入库存调拨单号查询')
   })
+
+  it('界面结构对齐需求截图的弹窗、分页和上传样式', () => {
+    const styles = readFileSync(join(process.cwd(), 'src/styles.css'), 'utf8')
+    const masterDataView = readFileSync(join(process.cwd(), 'src/views/MasterDataView.vue'), 'utf8')
+    const documentView = readFileSync(join(process.cwd(), 'src/views/DocumentView.vue'), 'utf8')
+    const profileView = readFileSync(join(process.cwd(), 'src/views/ProfileView.vue'), 'utf8')
+
+    expect(styles).toContain('.el-form-item.is-required .el-form-item__label::before')
+    expect(styles).toContain('.el-message-box__status.el-message-box-icon--warning')
+    expect(styles).toContain('.doc-upload-drop')
+    expect(styles).toContain('.dialog-section-title')
+    expect(masterDataView).toContain('doc-upload-drop')
+    expect(masterDataView).toContain('批量导入文件')
+    expect(documentView).toContain('class="dialog-section-title"')
+    expect(documentView).toContain(':rules="formRules"')
+    expect(profileView).toContain('profile-card')
+    expect(profileView).toContain('头像预览')
+  })
 })

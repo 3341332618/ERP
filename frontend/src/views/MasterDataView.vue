@@ -15,7 +15,7 @@
         </el-select>
         <el-button type="primary" @click="load">查询</el-button>
         <el-button @click="reset">重置</el-button>
-        <el-button type="success" @click="openCreate">新增</el-button>
+        <el-button type="primary" plain @click="openCreate">+ 新增</el-button>
         <el-button v-if="type === 'product'" @click="openImport">批量导入</el-button>
         <el-button v-if="type === 'product'" @click="downloadTemplate">下载模板</el-button>
       </div>
@@ -69,36 +69,38 @@
     </div>
 
     <el-dialog v-model="dialogVisible" :title="dialogTitle" width="520px">
-      <el-form :model="form" label-width="110px">
-        <el-form-item :label="`${config.name}名称`"><el-input v-model="form.name" :placeholder="`请输入${config.name}名称`" /></el-form-item>
+      <el-form :model="form" :rules="formRules" label-width="120px">
+        <el-form-item :label="`${config.name}名称`" prop="name"><el-input v-model="form.name" :placeholder="`请输入${config.name}名称`" /></el-form-item>
         <template v-if="type === 'product'">
-          <el-form-item label="商品分类"><el-input v-model="form.categoryName" placeholder="请输入商品分类" /></el-form-item>
-          <el-form-item label="商品品牌"><el-input v-model="form.brandName" placeholder="请输入商品品牌" /></el-form-item>
-          <el-form-item label="商品单位"><el-input v-model="form.unitName" placeholder="请输入商品单位" /></el-form-item>
-          <el-form-item label="建议采购价"><el-input v-model="form.purchasePrice" placeholder="请输入建议采购价" /></el-form-item>
-          <el-form-item label="建议零售价"><el-input v-model="form.salePrice" placeholder="请输入建议零售价" /></el-form-item>
+          <el-form-item label="商品分类" prop="categoryName"><el-input v-model="form.categoryName" placeholder="请输入商品分类" /></el-form-item>
+          <el-form-item label="商品品牌" prop="brandName"><el-input v-model="form.brandName" placeholder="请输入商品品牌" /></el-form-item>
+          <el-form-item label="商品单位" prop="unitName"><el-input v-model="form.unitName" placeholder="请输入商品单位" /></el-form-item>
+          <el-form-item label="建议采购价（元）" prop="purchasePrice"><el-input v-model="form.purchasePrice" placeholder="请输入建议采购价（元）" /></el-form-item>
+          <el-form-item label="建议零售价（元）" prop="salePrice"><el-input v-model="form.salePrice" placeholder="请输入建议零售价（元）" /></el-form-item>
           <el-form-item label="商品图片">
-            <div class="image-upload-box">
-              <el-image v-if="form.imageData" :src="form.imageData" class="image-preview" fit="cover" />
-              <div v-else class="empty-preview">无图片</div>
-              <div class="image-actions">
-                <el-upload
-                  :auto-upload="false"
-                  :show-file-list="false"
-                  accept=".jpg,.jpeg,.png,image/jpeg,image/png"
-                  :on-change="handleProductImageChange"
-                >
-                  <el-button type="primary">{{ form.imageData ? '更换图片' : '上传图片' }}</el-button>
-                </el-upload>
-                <el-button v-if="form.imageData" @click="removeProductImage">删除图片</el-button>
-              </div>
+            <div class="image-upload-box image-upload-box-large">
+              <el-upload
+                :auto-upload="false"
+                :show-file-list="false"
+                accept=".jpg,.jpeg,.png,image/jpeg,image/png"
+                :on-change="handleProductImageChange"
+              >
+                <div class="product-image-uploader">
+                  <el-image v-if="form.imageData" :src="form.imageData" class="image-preview" fit="cover" />
+                  <div v-else class="empty-preview">
+                    <el-icon><Plus /></el-icon>
+                    <span>上传图片</span>
+                  </div>
+                </div>
+              </el-upload>
+              <el-button v-if="form.imageData" @click="removeProductImage">删除图片</el-button>
             </div>
           </el-form-item>
         </template>
         <template v-if="['warehouse', 'customer', 'supplier'].includes(type)">
-          <el-form-item label="联系人"><el-input v-model="form.contact" placeholder="请输入联系人" /></el-form-item>
-          <el-form-item label="联系电话"><el-input v-model="form.phone" placeholder="请输入联系电话" /></el-form-item>
-          <el-form-item label="地址"><el-input v-model="form.address" placeholder="请输入地址" /></el-form-item>
+          <el-form-item label="联系人" prop="contact"><el-input v-model="form.contact" placeholder="请输入联系人" /></el-form-item>
+          <el-form-item label="联系电话" prop="phone"><el-input v-model="form.phone" placeholder="请输入联系电话" /></el-form-item>
+          <el-form-item label="地址" prop="address"><el-input v-model="form.address" placeholder="请输入地址" /></el-form-item>
         </template>
       </el-form>
       <template #footer>
@@ -109,17 +111,24 @@
       </template>
     </el-dialog>
 
-    <el-dialog v-model="importVisible" title="批量导入" width="680px">
+    <el-dialog v-model="importVisible" title="批量导入" width="420px">
       <el-form label-width="100px">
-        <el-form-item label="上传文件">
+        <el-form-item label="批量导入文件">
           <el-upload
             :auto-upload="false"
             :show-file-list="false"
             accept=".csv,.txt,.xls,.xlsx"
             :on-change="handleImportFileChange"
           >
-            <el-button type="primary">上传文件</el-button>
+            <div class="doc-upload-drop">
+              <div class="doc-upload-inner">
+                <el-icon class="doc-upload-icon"><UploadFilled /></el-icon>
+                <div>将文件拖到此处，或 <span class="doc-upload-link">点击上传</span></div>
+              </div>
+            </div>
           </el-upload>
+          <div class="import-template-link" @click="downloadTemplate">下载模板</div>
+          <div class="dialog-tip">提示：仅允许导入“xls”或“xlsx”格式文件！</div>
         </el-form-item>
         <el-form-item label="导入内容">
           <el-input
@@ -142,7 +151,8 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import type { UploadFile } from 'element-plus'
+import type { FormRules, UploadFile } from 'element-plus'
+import { Plus, UploadFilled } from '@element-plus/icons-vue'
 import { changeMasterStatus, createMaster, importProducts, listMaster, updateMaster } from '../api'
 import { readValidDocumentImage } from '../utils/imageUpload'
 
@@ -170,6 +180,17 @@ const configs: Record<string, { name: string }> = {
 const type = computed(() => String(route.params.type))
 const config = computed(() => configs[type.value] || { name: '资料' })
 const dialogTitle = computed(() => `${editingId.value ? '修改' : '新增'}${config.value.name}`)
+const formRules = computed<FormRules>(() => ({
+  name: [{ required: true, message: `${config.value.name}名称必填，请重新输入。`, trigger: 'blur' }],
+  categoryName: [{ required: type.value === 'product', message: '商品分类必填，请重新输入。', trigger: 'blur' }],
+  brandName: [{ required: type.value === 'product', message: '商品品牌必填，请重新输入。', trigger: 'blur' }],
+  unitName: [{ required: type.value === 'product', message: '商品单位必填，请重新输入。', trigger: 'blur' }],
+  purchasePrice: [{ required: type.value === 'product', message: '建议采购价必填，请重新输入。', trigger: 'blur' }],
+  salePrice: [{ required: type.value === 'product', message: '建议零售价必填，请重新输入。', trigger: 'blur' }],
+  contact: [{ required: ['warehouse', 'customer', 'supplier'].includes(type.value), message: '联系人必填，请重新输入。', trigger: 'blur' }],
+  phone: [{ required: ['warehouse', 'customer', 'supplier'].includes(type.value), message: '联系电话必填，请重新输入。', trigger: 'blur' }],
+  address: [{ required: ['warehouse', 'customer', 'supplier'].includes(type.value), message: '地址必填，请重新输入。', trigger: 'blur' }]
+}))
 const filteredRows = computed(() => rows.value.filter((row) => {
   const matchCategory = type.value !== 'product' || !query.categoryName || String(row.categoryName || '').includes(query.categoryName)
   const matchBrand = type.value !== 'product' || !query.brandName || String(row.brandName || '').includes(query.brandName)
@@ -231,7 +252,7 @@ function removeProductImage() {
 
 async function toggle(row: any) {
   const next = row.status === 'ENABLED' ? 'DISABLED' : 'ENABLED'
-  await ElMessageBox.confirm(`确认${next === 'ENABLED' ? '启用' : '禁用'}该数据？`, '操作确认', { confirmButtonText: '确定', cancelButtonText: '取消' })
+  await ElMessageBox.confirm(`确认${next === 'ENABLED' ? '启用' : '禁用'}该数据？`, '操作确认', { confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning' })
   await changeMasterStatus(type.value, row.id, next)
   ElMessage.success('操作成功')
   await load()
@@ -316,13 +337,41 @@ onMounted(load)
   gap: 12px;
 }
 
+.image-upload-box-large {
+  align-items: flex-start;
+}
+
+.product-image-uploader,
+.empty-preview {
+  width: 120px;
+  height: 120px;
+  border: 1px dashed #dcdfe6;
+  border-radius: 2px;
+}
+
+.product-image-uploader {
+  cursor: pointer;
+}
+
+.product-image-uploader .image-preview {
+  width: 100%;
+  height: 100%;
+  border-radius: 2px;
+}
+
 .empty-preview {
   display: inline-flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  border: 1px dashed #dcdfe6;
+  gap: 6px;
   color: #909399;
   font-size: 12px;
+}
+
+.empty-preview .el-icon {
+  font-size: 28px;
+  color: #8c9aad;
 }
 
 .image-actions {
@@ -343,5 +392,12 @@ onMounted(load)
   gap: 14px;
   padding-top: 14px;
   color: #606266;
+}
+
+.import-template-link {
+  width: 100%;
+  margin-top: 10px;
+  color: #606266;
+  cursor: pointer;
 }
 </style>
