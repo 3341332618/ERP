@@ -128,7 +128,6 @@ public class ErpStore {
         if (role == RoleCode.SETTLEMENT_MANAGER) {
             menus.add(settlementMenu());
         }
-        menus.add(new MenuNode("个人中心", "/profile"));
         return menus;
     }
 
