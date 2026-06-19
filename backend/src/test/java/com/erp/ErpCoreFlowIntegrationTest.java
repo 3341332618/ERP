@@ -111,6 +111,52 @@ class ErpCoreFlowIntegrationTest {
     }
 
     @Test
+    void stockTransferNotifiesInboundAndOutboundWarehouseStaffSeparately() {
+        var purchaseUser = store.userByUsername("purchase_staff");
+        var inbound = store.createSimpleDocument("purchase-inbound", purchaseUser.id);
+        store.submitDocument(inbound.id, purchaseUser.id);
+        var sourceStaff = store.userByUsername("warehouse_staff");
+        store.approve(inbound.id, sourceStaff.id);
+
+        var targetStaff = store.userByUsername("warehouse_staff_south");
+        var targetWarehouse = store.createMaster("warehouse", Map.of(
+            "name", "华南调拨仓库",
+            "phone", "13800000009",
+            "address", "深圳市南山区",
+            "warehouseUserId", targetStaff.id.toString()
+        ));
+        var product = store.masterRecord("product", inbound.items.get(0).productId);
+        var manager = store.userByUsername("warehouse_manager");
+
+        var transfer = store.createDocument("stock-transfer", manager.id, Map.of(
+            "warehouseId", inbound.warehouseId.toString(),
+            "targetWarehouseId", targetWarehouse.id.toString(),
+            "productId", product.id.toString(),
+            "quantity", "2",
+            "remark", "跨仓补货"
+        ));
+        store.submitDocument(transfer.id, manager.id);
+
+        assertThat(store.messages(sourceStaff.id))
+            .anySatisfy(message -> assertThat(message.content).contains("【出库审核】单据号：" + transfer.documentNo));
+        assertThat(store.messages(targetStaff.id))
+            .anySatisfy(message -> assertThat(message.content).contains("【入库审核】单据号：" + transfer.documentNo));
+
+        assertThat(store.auditList("outbound", sourceStaff.id))
+            .extracting(document -> document.documentNo)
+            .contains(transfer.documentNo);
+        assertThat(store.auditList("inbound", sourceStaff.id))
+            .extracting(document -> document.documentNo)
+            .doesNotContain(transfer.documentNo);
+        assertThat(store.auditList("inbound", targetStaff.id))
+            .extracting(document -> document.documentNo)
+            .contains(transfer.documentNo);
+        assertThat(store.auditList("outbound", targetStaff.id))
+            .extracting(document -> document.documentNo)
+            .doesNotContain(transfer.documentNo);
+    }
+
+    @Test
     void salesOutboundUsesSelectedDetailsAndCreatesIncomeSettlement() {
         var purchaseUser = store.userByUsername("purchase_staff");
         var inbound = store.createSimpleDocument("purchase-inbound", purchaseUser.id);
@@ -215,6 +261,62 @@ class ErpCoreFlowIntegrationTest {
             assertThat(record.relatedDocumentNo).isEqualTo(salesReturn.documentNo);
             assertThat(record.amount).isEqualByComparingTo("5200.00");
         });
+    }
+
+    @Test
+    void returnDocumentsRequireApprovedRelatedDocumentAndRemainingQuantity() {
+        var purchaseUser = store.userByUsername("purchase_staff");
+        var product = store.masters("product", null, null).get(0);
+        var supplier = store.masters("supplier", null, null).get(0);
+        var warehouse = store.masters("warehouse", null, null).get(0);
+
+        assertThatThrownBy(() -> store.createDocument("purchase-return", purchaseUser.id, Map.of(
+            "warehouseId", warehouse.id.toString(),
+            "partnerId", supplier.id.toString(),
+            "productId", product.id.toString(),
+            "quantity", "1",
+            "price", "4200"
+        )))
+            .isInstanceOf(BusinessException.class)
+            .hasMessageContaining("关联采购入库单必填，请重新输入。");
+
+        var inbound = store.createDocument("purchase-inbound", purchaseUser.id, Map.of(
+            "warehouseId", warehouse.id.toString(),
+            "partnerId", supplier.id.toString(),
+            "productId", product.id.toString(),
+            "quantity", "5",
+            "price", "4200"
+        ));
+
+        assertThatThrownBy(() -> store.createDocument("purchase-return", purchaseUser.id, Map.of(
+            "relatedDocumentNo", inbound.documentNo,
+            "productId", product.id.toString(),
+            "quantity", "1",
+            "price", "4200"
+        )))
+            .isInstanceOf(BusinessException.class)
+            .hasMessageContaining("关联采购入库单号异常，请重新输入。");
+
+        store.submitDocument(inbound.id, purchaseUser.id);
+        store.approve(inbound.id, store.userByUsername("warehouse_staff").id);
+
+        var firstReturn = store.createDocument("purchase-return", purchaseUser.id, Map.of(
+            "relatedDocumentNo", inbound.documentNo,
+            "productId", product.id.toString(),
+            "quantity", "2",
+            "price", "4200"
+        ));
+
+        assertThat(firstReturn.warehouseId).isEqualTo(inbound.warehouseId);
+        assertThat(firstReturn.partnerId).isEqualTo(inbound.partnerId);
+        assertThatThrownBy(() -> store.createDocument("purchase-return", purchaseUser.id, Map.of(
+            "relatedDocumentNo", inbound.documentNo,
+            "productId", product.id.toString(),
+            "quantity", "4",
+            "price", "4200"
+        )))
+            .isInstanceOf(BusinessException.class)
+            .hasMessageContaining("采退数量输入有误，请重新输入。");
     }
 
     @Test

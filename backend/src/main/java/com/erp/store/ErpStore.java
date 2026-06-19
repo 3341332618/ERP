@@ -47,6 +47,7 @@ public class ErpStore {
         createUser("purchase_staff", "采购专员", "13800000003", RoleCode.PURCHASE_STAFF, null);
         createUser("warehouse_manager", "仓库主管", "13800000004", RoleCode.WAREHOUSE_MANAGER, null);
         var warehouseStaff = createUser("warehouse_staff", "仓库专员", "13800000005", RoleCode.WAREHOUSE_STAFF, null);
+        createUser("warehouse_staff_south", "华南仓库专员", "13800000009", RoleCode.WAREHOUSE_STAFF, null);
         createUser("sales_manager", "销售主管", "13800000006", RoleCode.SALES_MANAGER, null);
         createUser("sales_staff", "销售专员", "13800000007", RoleCode.SALES_STAFF, null);
         createUser("settlement_manager", "结算主管", "13800000008", RoleCode.SETTLEMENT_MANAGER, null);
@@ -207,6 +208,7 @@ public class ErpStore {
             record.warehouseUserId = Long.valueOf(payload.get("warehouseUserId"));
         }
         master.put(type + ":" + record.id, record);
+        bindWarehouseStaff(record);
         return record;
     }
 
@@ -226,6 +228,10 @@ public class ErpStore {
         record.phone = payload.getOrDefault("phone", record.phone);
         record.address = payload.getOrDefault("address", record.address);
         record.updateTime = LocalDateTime.now();
+        if ("warehouse".equals(type) && payload.containsKey("warehouseUserId")) {
+            record.warehouseUserId = Long.valueOf(payload.get("warehouseUserId"));
+            bindWarehouseStaff(record);
+        }
         if ("product".equals(type)) {
             record.code = productCode(record.categoryName, record.brandName, productSeq - 1);
         }
@@ -443,7 +449,7 @@ public class ErpStore {
             .filter(directionFilter)
             .filter(document -> document.status != DocumentStatus.DRAFT)
             .filter(document -> user.role == RoleCode.WAREHOUSE_MANAGER
-                || (user.role == RoleCode.WAREHOUSE_STAFF && documentWarehouseMatches(user, document)))
+                || (user.role == RoleCode.WAREHOUSE_STAFF && documentAuditWarehouseMatches(user, document, direction)))
             .sorted(Comparator.comparing((DocumentRecord document) -> document.operationTime).reversed())
             .toList();
     }
@@ -588,6 +594,10 @@ public class ErpStore {
     }
 
     private void applyDocumentPayload(DocumentRecord document, Map<String, ?> payload) {
+        if (isReturnType(document.type)) {
+            applyRelatedDocument(document, text(payload, "relatedDocumentNo"));
+            return;
+        }
         if (payload.isEmpty()) {
             return;
         }
@@ -632,6 +642,7 @@ public class ErpStore {
         if (document.type == DocumentType.STOCK_TRANSFER) {
             require(item.remark, "备注必填，请重新输入。");
         }
+        validateReturnQuantity(document, item);
         if (requiresAvailableStock(document.type) && item.quantity.compareTo(item.availableQuantity) > 0) {
             throw new BusinessException("可用库存不足，请重新输入" + stockQuantityLabel(document.type) + "。");
         }
@@ -670,6 +681,7 @@ public class ErpStore {
         return switch (type) {
             case PURCHASE_RETURN -> "采退数量";
             case SALES_OUTBOUND -> "销售出库数量";
+            case SALES_RETURN -> "销退数量";
             case STOCK_TRANSFER -> "调出数量";
             default -> "数量";
         };
@@ -681,6 +693,72 @@ public class ErpStore {
 
     private String partnerLabel(DocumentType type) {
         return type == DocumentType.PURCHASE_INBOUND || type == DocumentType.PURCHASE_RETURN ? "供应商" : "客户";
+    }
+
+    private boolean isReturnType(DocumentType type) {
+        return type == DocumentType.PURCHASE_RETURN || type == DocumentType.SALES_RETURN;
+    }
+
+    private void applyRelatedDocument(DocumentRecord document, String relatedDocumentNo) {
+        require(relatedDocumentNo, relatedRequiredMessage(document.type));
+        var related = findDocumentByNo(relatedDocumentNo);
+        var requiredType = document.type == DocumentType.PURCHASE_RETURN ? DocumentType.PURCHASE_INBOUND : DocumentType.SALES_OUTBOUND;
+        if (related == null
+            || related.type != requiredType
+            || related.status != DocumentStatus.APPROVED
+            || !related.creatorId.equals(document.creatorId)) {
+            throw new BusinessException(relatedExceptionMessage(document.type));
+        }
+        document.relatedDocumentNo = related.documentNo;
+        document.warehouseId = related.warehouseId;
+        document.warehouseCode = related.warehouseCode;
+        document.warehouseName = related.warehouseName;
+        document.partnerId = related.partnerId;
+        document.partnerCode = related.partnerCode;
+        document.partnerName = related.partnerName;
+    }
+
+    private DocumentRecord findDocumentByNo(String documentNo) {
+        return documents.values().stream()
+            .filter(document -> document.documentNo.equals(documentNo))
+            .findFirst()
+            .orElse(null);
+    }
+
+    private void validateReturnQuantity(DocumentRecord document, DocumentItem item) {
+        if (!isReturnType(document.type)) {
+            return;
+        }
+        var related = findDocumentByNo(document.relatedDocumentNo);
+        var originalQuantity = related.items.stream()
+            .filter(relatedItem -> relatedItem.productId.equals(item.productId))
+            .map(relatedItem -> relatedItem.quantity)
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
+        var returnedQuantity = documents.values().stream()
+            .filter(existing -> !existing.id.equals(document.id))
+            .filter(existing -> existing.type == document.type)
+            .filter(existing -> document.relatedDocumentNo.equals(existing.relatedDocumentNo))
+            .filter(existing -> existing.status != DocumentStatus.REJECTED)
+            .flatMap(existing -> existing.items.stream())
+            .filter(existingItem -> existingItem.productId.equals(item.productId))
+            .map(existingItem -> existingItem.quantity)
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
+        var remainingQuantity = originalQuantity.subtract(returnedQuantity);
+        if (item.quantity.compareTo(remainingQuantity) > 0) {
+            throw new BusinessException(stockQuantityLabel(document.type) + "输入有误，请重新输入。");
+        }
+    }
+
+    private String relatedRequiredMessage(DocumentType type) {
+        return type == DocumentType.PURCHASE_RETURN
+            ? "关联采购入库单必填，请重新输入。"
+            : "关联销售出库单必填，请重新输入。";
+    }
+
+    private String relatedExceptionMessage(DocumentType type) {
+        return type == DocumentType.PURCHASE_RETURN
+            ? "关联采购入库单号异常，请重新输入。"
+            : "关联销售出库单号异常，请重新输入。";
     }
 
     private void recalc(DocumentRecord document) {
@@ -704,15 +782,36 @@ public class ErpStore {
             || user.warehouseId.equals(document.targetWarehouseId);
     }
 
+    private boolean documentAuditWarehouseMatches(User user, DocumentRecord document, String direction) {
+        if (user.warehouseId == null) {
+            return true;
+        }
+        if (document.type == DocumentType.STOCK_TRANSFER) {
+            return "inbound".equals(direction)
+                ? user.warehouseId.equals(document.targetWarehouseId)
+                : user.warehouseId.equals(document.warehouseId);
+        }
+        return user.warehouseId.equals(document.warehouseId);
+    }
+
     private void notifyWarehouse(DocumentRecord document) {
+        if (document.type == DocumentType.STOCK_TRANSFER) {
+            notifyWarehouse(document, document.warehouseId, "出库审核");
+            notifyWarehouse(document, document.targetWarehouseId, "入库审核");
+            return;
+        }
+        notifyWarehouse(document, document.warehouseId, document.type.inbound ? "入库审核" : "出库审核");
+    }
+
+    private void notifyWarehouse(DocumentRecord document, Long warehouseId, String title) {
         users.values().stream()
             .filter(user -> user.role == RoleCode.WAREHOUSE_STAFF)
-            .filter(user -> documentWarehouseMatches(user, document))
+            .filter(user -> user.warehouseId == null || user.warehouseId.equals(warehouseId))
             .forEach(user -> {
                 var message = new Message();
                 message.id = ids.incrementAndGet();
                 message.userId = user.id;
-                message.title = document.type.inbound ? "入库审核" : "出库审核";
+                message.title = title;
                 message.content = "【" + message.title + "】单据号：" + document.documentNo + " 待审核 " + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
                 messages.add(message);
             });
@@ -809,6 +908,13 @@ public class ErpStore {
             .filter(record -> record.type.equals(type))
             .findFirst()
             .orElseThrow(() -> new BusinessException(displayName(type) + "不存在"));
+    }
+
+    private void bindWarehouseStaff(MasterRecord record) {
+        if (!"warehouse".equals(record.type) || record.warehouseUserId == null) {
+            return;
+        }
+        userById(record.warehouseUserId).warehouseId = record.id;
     }
 
     private String nextMasterCode(String type, Map<String, String> payload) {

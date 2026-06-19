@@ -38,7 +38,10 @@
             </template>
             <div class="message-title">系统消息</div>
             <el-empty v-if="messages.length === 0" description="暂无消息内容" />
-            <div v-for="item in messages" :key="item.id" class="message-item">{{ item.content }}</div>
+            <div v-for="item in displayedMessages" :key="item.id" class="message-item">{{ item.content }}</div>
+            <el-button v-if="messages.length > 10 && !messageExpanded" text type="primary" @click="messageExpanded = true">
+              展开全部消息
+            </el-button>
           </el-popover>
           <el-dropdown @command="handleCommand">
             <span class="user-entry">
@@ -75,6 +78,7 @@ const auth = useAuthStore()
 const router = useRouter()
 const route = useRoute()
 const messages = ref<any[]>([])
+const messageExpanded = ref(false)
 
 const matchedMenu = computed(() => {
   for (const menu of auth.menus) {
@@ -98,9 +102,11 @@ const breadcrumbNodes = computed(() => {
   return [String(route.name || '首页看板')]
 })
 const avatarFallback = computed(() => auth.user?.name?.slice(0, 1) || '用')
+const displayedMessages = computed(() => messageExpanded.value ? messages.value : messages.value.slice(0, 10))
 
 async function loadMessages() {
   messages.value = await fetchMessages()
+  messageExpanded.value = false
 }
 
 function handleCommand(command: string) {

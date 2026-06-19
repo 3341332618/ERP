@@ -94,7 +94,7 @@
         <el-form-item v-if="!isTransfer" :label="config.partnerIdLabel" prop="partnerId">
           <el-input v-model="form.partnerId" :placeholder="`请输入${config.partnerIdLabel}`" />
         </el-form-item>
-        <el-form-item v-if="config.showRelated" label="关联单据号">
+        <el-form-item v-if="config.showRelated" label="关联单据号" prop="relatedDocumentNo">
           <el-input v-model="form.relatedDocumentNo" :placeholder="`请输入${config.relatedLabel}`" />
         </el-form-item>
         <el-form-item label="商品标识" prop="productId">
@@ -152,6 +152,7 @@ const config = computed(() => {
       amountLabel: '调拨金额',
       totalLabel: '调拨金额',
       relatedLabel: '',
+      relatedRequiredMessage: '',
       showRelated: false
     }
   }
@@ -167,6 +168,7 @@ const config = computed(() => {
       amountLabel: '销退金额（元）',
       totalLabel: '销退总金额',
       relatedLabel: '关联销售出库单号',
+      relatedRequiredMessage: '关联销售出库单必填，请重新输入。',
       showRelated: true
     }
   }
@@ -182,6 +184,7 @@ const config = computed(() => {
       amountLabel: '采退金额（元）',
       totalLabel: '采退总金额',
       relatedLabel: '关联采购入库单号',
+      relatedRequiredMessage: '关联采购入库单必填，请重新输入。',
       showRelated: true
     }
   }
@@ -197,6 +200,7 @@ const config = computed(() => {
       amountLabel: '销售结算金额（元）',
       totalLabel: '销出总金额',
       relatedLabel: '',
+      relatedRequiredMessage: '',
       showRelated: false
     }
   }
@@ -211,6 +215,7 @@ const config = computed(() => {
     amountLabel: '采购结算金额（元）',
     totalLabel: '采入总金额',
     relatedLabel: '',
+    relatedRequiredMessage: '',
     showRelated: false
   }
 })
@@ -225,6 +230,7 @@ const formRules = computed<FormRules>(() => ({
   warehouseId: [{ required: true, message: isTransfer.value ? '调出仓库必填，请重新输入。' : '仓库必填，请重新输入。', trigger: 'blur' }],
   targetWarehouseId: [{ required: isTransfer.value, message: '调入仓库必填，请重新输入。', trigger: 'blur' }],
   partnerId: [{ required: !isTransfer.value, message: `${config.value.partnerIdLabel}必填，请重新输入。`, trigger: 'blur' }],
+  relatedDocumentNo: [{ required: config.value.showRelated, message: config.value.relatedRequiredMessage, trigger: 'blur' }],
   productId: [{ required: true, message: '商品必填，请重新输入。', trigger: 'blur' }],
   quantity: [{ required: true, message: `${config.value.quantityLabel}必填，请重新输入。`, trigger: 'blur' }],
   price: [{ required: !isTransfer.value, message: `${config.value.priceLabel}必填，请重新输入。`, trigger: 'blur' }]
@@ -245,6 +251,9 @@ const operationRecords = computed(() => {
 })
 
 function statusLabel(status?: string) {
+  if (isTransfer.value) {
+    return ({ DRAFT: '未调拨', PENDING: '待调拨', APPROVED: '已调拨', REJECTED: '无法调拨' } as Record<string, string>)[status || ''] || '未调拨'
+  }
   return ({ DRAFT: '待提交', PENDING: '待审核', APPROVED: '审核通过', REJECTED: '审核拒绝' } as Record<string, string>)[status || ''] || '待提交'
 }
 

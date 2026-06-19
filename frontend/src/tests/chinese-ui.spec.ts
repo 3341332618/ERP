@@ -78,6 +78,30 @@ describe('中文界面文案', () => {
     expect(documentView).toContain("route.path === '/inventory/transfer'")
     expect(documentView).toContain("api: 'stock-transfer'")
     expect(documentView).toContain('请输入库存调拨单号查询')
+    expect(documentView).toContain('未调拨')
+    expect(documentView).toContain('待调拨')
+    expect(documentView).toContain('已调拨')
+    expect(documentView).toContain('无法调拨')
+  })
+
+  it('退货单据表单要求关联原始单据', () => {
+    const documentView = readFileSync(join(process.cwd(), 'src/views/DocumentView.vue'), 'utf8')
+
+    expect(documentView).toContain('prop="relatedDocumentNo"')
+    expect(documentView).toContain('关联采购入库单必填，请重新输入。')
+    expect(documentView).toContain('关联销售出库单必填，请重新输入。')
+  })
+
+  it('审核和消息中心覆盖库存调拨入出库要求', () => {
+    const auditView = readFileSync(join(process.cwd(), 'src/views/AuditView.vue'), 'utf8')
+    const appLayout = readFileSync(join(process.cwd(), 'src/layouts/AppLayout.vue'), 'utf8')
+
+    expect(auditView).toContain('业务类型')
+    expect(auditView).toContain('调拨入库')
+    expect(auditView).toContain('调拨出库')
+    expect(auditView).toContain('审核拒绝原因')
+    expect(appLayout).toContain('展开全部消息')
+    expect(appLayout).toContain('displayedMessages')
   })
 
   it('界面结构对齐需求截图的弹窗、分页和上传样式', () => {
