@@ -75,6 +75,67 @@ class TrainingCompetitionIntegrationTest {
     }
 
     @Test
+    void publishedBugsAreVisibleToStudentsAndCanBeReproducedFromStudentWorkspace() {
+        var admin = store.userByUsername("admin");
+        var student = store.userByUsername("student01");
+
+        assertThat(store.activeBugTasks(student.id)).isEmpty();
+
+        store.createMaster("brand", Map.of("name", "学生端重复品牌"), student.id);
+        assertThatThrownBy(() -> store.createMaster("brand", Map.of("name", "学生端重复品牌"), student.id))
+            .isInstanceOf(BusinessException.class)
+            .hasMessageContaining("商品品牌名称不唯一，请重新输入。");
+
+        var longCategoryName = "学生端12345678901234567";
+        assertThat(longCategoryName).hasSizeGreaterThan(16);
+        assertThatThrownBy(() -> store.createMaster("category", Map.of("name", longCategoryName), student.id))
+            .isInstanceOf(BusinessException.class)
+            .hasMessageContaining("商品分类名称输入有误，请重新输入。");
+
+        store.publishBug("BUG-0002", true, admin.id);
+        store.publishBug("BUG-0004", true, admin.id);
+
+        assertThat(store.activeBugTasks(student.id))
+            .extracting(task -> task.id)
+            .containsExactly("BUG-0002", "BUG-0004");
+
+        var duplicatedBrand = store.createMaster("brand", Map.of("name", "学生端重复品牌"), student.id);
+        var oversizedCategory = store.createMaster("category", Map.of("name", longCategoryName), student.id);
+
+        assertThat(duplicatedBrand.name).isEqualTo("学生端重复品牌");
+        assertThat(duplicatedBrand.workspaceOwnerId).isEqualTo(student.id);
+        assertThat(oversizedCategory.name).isEqualTo(longCategoryName);
+        assertThat(oversizedCategory.workspaceOwnerId).isEqualTo(student.id);
+
+        var brandReport = store.submitBugReport(student.id, Map.of(
+            "bugId", "BUG-0004",
+            "title", "学员端商品品牌重复仍可保存",
+            "moduleName", "商品品牌",
+            "actualResult", "重复品牌保存成功",
+            "expectedResult", "提示商品品牌名称不唯一",
+            "reproduceSteps", "学员登录后进入商品品牌，新增已有品牌名称并保存",
+            "evidence", "学生端工作区返回保存成功"
+        ));
+        var categoryReport = store.submitBugReport(student.id, Map.of(
+            "bugId", "BUG-0002",
+            "title", "学员端商品分类超长名称仍可保存",
+            "moduleName", "商品分类",
+            "actualResult", "超长分类名称保存成功",
+            "expectedResult", "提示商品分类名称输入有误",
+            "reproduceSteps", "学员登录后进入商品分类，输入超过16位名称并保存",
+            "evidence", "学生端工作区返回保存成功"
+        ));
+
+        assertThat(store.bugReports(student.id))
+            .extracting(report -> report.bugId)
+            .containsExactlyInAnyOrder("BUG-0002", "BUG-0004");
+        assertThat(brandReport.status).isEqualTo(BugReportStatus.PENDING);
+        assertThat(categoryReport.status).isEqualTo(BugReportStatus.PENDING);
+        assertThat(brandReport.studentName).isEqualTo("测试学员一");
+        assertThat(categoryReport.studentName).isEqualTo("测试学员一");
+    }
+
+    @Test
     void adminCanCreateAndDeleteStudentAccounts() {
         var admin = store.userByUsername("admin");
 
