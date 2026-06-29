@@ -66,13 +66,15 @@ public final class ErpModels {
 
     public enum RoleCode {
         ADMIN("系统管理员"),
+        SUPER_ADMIN("终极管理员"),
         PURCHASE_MANAGER("采购主管"),
         PURCHASE_STAFF("采购专员"),
         WAREHOUSE_MANAGER("仓库主管"),
         WAREHOUSE_STAFF("仓库专员"),
         SALES_MANAGER("销售主管"),
         SALES_STAFF("销售专员"),
-        SETTLEMENT_MANAGER("结算主管");
+        SETTLEMENT_MANAGER("结算主管"),
+        STUDENT("测试学员");
 
         public final String label;
 
@@ -92,6 +94,15 @@ public final class ErpModels {
         public Status status = Status.ENABLED;
         public LocalDateTime createTime = LocalDateTime.now();
         public Long warehouseId;
+    }
+
+    public static class StudentAccount {
+        public Long id;
+        public String username;
+        public String name;
+        public String phone;
+        public Status status;
+        public LocalDateTime createTime;
     }
 
     public static class MenuNode {
@@ -119,6 +130,109 @@ public final class ErpModels {
         public LocalDateTime createTime = LocalDateTime.now();
     }
 
+    public enum BugReportStatus {
+        PENDING("待评分"),
+        APPROVED("已通过"),
+        REJECTED("已驳回");
+
+        public final String label;
+
+        BugReportStatus(String label) {
+            this.label = label;
+        }
+    }
+
+    public static class BugDefinition {
+        public String id;
+        public String roleName;
+        public String moduleName;
+        public String functionName;
+        public String summary;
+        public String reproduceSteps;
+        public String expectedResult;
+        public String actualResult;
+        public String severity;
+        public boolean active;
+        public Long publisherId;
+        public String publisherName;
+        public LocalDateTime publishTime;
+    }
+
+    public static class BugReport {
+        public Long id;
+        public String bugId;
+        public String bugSummary;
+        public String moduleName;
+        public String title;
+        public String reproduceSteps;
+        public String expectedResult;
+        public String actualResult;
+        public String evidence;
+        public Long studentId;
+        public String studentName;
+        public BugReportStatus status = BugReportStatus.PENDING;
+        public Integer score = 0;
+        public String reviewComment;
+        public Long reviewerId;
+        public String reviewerName;
+        public LocalDateTime submitTime = LocalDateTime.now();
+        public LocalDateTime reviewTime;
+    }
+
+    public enum CompetitionSubmissionStatus {
+        PENDING("待评分"),
+        APPROVED("已通过"),
+        REJECTED("已驳回");
+
+        public final String label;
+
+        CompetitionSubmissionStatus(String label) {
+            this.label = label;
+        }
+    }
+
+    public static class CompetitionFileSubmission {
+        public Long id;
+        public String title;
+        public String moduleName;
+        public String bugId;
+        public String fileName;
+        public String contentType;
+        public long fileSize;
+        public String storagePath;
+        public Long studentId;
+        public String studentName;
+        public CompetitionSubmissionStatus status = CompetitionSubmissionStatus.PENDING;
+        public Integer score = 0;
+        public String roundName;
+        public String reviewComment;
+        public Long reviewerId;
+        public String reviewerName;
+        public LocalDateTime submitTime = LocalDateTime.now();
+        public LocalDateTime reviewTime;
+    }
+
+    public static class RankingHistory {
+        public Long id;
+        public String roundName;
+        public Long studentId;
+        public String studentName;
+        public Integer totalScore = 0;
+        public Integer approvedReports = 0;
+        public Integer approvedFiles = 0;
+        public LocalDateTime createTime = LocalDateTime.now();
+    }
+
+    public static class StudentOperationLog {
+        public Long id;
+        public Long studentId;
+        public String studentName;
+        public String moduleName;
+        public String actionName;
+        public String detail;
+        public LocalDateTime createTime = LocalDateTime.now();
+    }
+
     public static class MasterRecord {
         public Long id;
         public String type;
@@ -135,6 +249,7 @@ public final class ErpModels {
         public String address;
         public String settlementMethod;
         public Long warehouseUserId;
+        public Long workspaceOwnerId;
         public Status status = Status.ENABLED;
         public LocalDateTime createTime = LocalDateTime.now();
         public LocalDateTime updateTime;
@@ -173,6 +288,7 @@ public final class ErpModels {
         public DocumentStatus status = DocumentStatus.DRAFT;
         public Long creatorId;
         public String creatorName;
+        public Long workspaceOwnerId;
         public LocalDateTime operationTime = LocalDateTime.now();
         public Long auditorId;
         public String auditorName;
@@ -183,6 +299,7 @@ public final class ErpModels {
     public static class StockBalance {
         public Long warehouseId;
         public Long productId;
+        public Long workspaceOwnerId;
         public BigDecimal actualQuantity = BigDecimal.ZERO;
         public BigDecimal availableQuantity = BigDecimal.ZERO;
     }
@@ -194,6 +311,7 @@ public final class ErpModels {
         public String documentType;
         public BigDecimal amount;
         public String relatedDocumentNo;
+        public Long workspaceOwnerId;
         public LocalDateTime createTime = LocalDateTime.now();
     }
 }

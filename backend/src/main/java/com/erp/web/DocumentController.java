@@ -47,8 +47,9 @@ public class DocumentController {
     }
 
     @GetMapping("/{type}/{id}")
-    public ApiResult<?> detail(@PathVariable String type, @PathVariable Long id) {
-        return ApiResult.success(store.getDocument(id));
+    public ApiResult<?> detail(@PathVariable String type, @PathVariable Long id, Authentication authentication) {
+        var user = store.userByUsername(authentication.getName());
+        return ApiResult.success(store.getDocument(id, user.id));
     }
 
     @PostMapping("/{type}/{id}/submit")

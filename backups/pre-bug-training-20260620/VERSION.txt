@@ -1,0 +1,5 @@
+﻿commit=d079f47e5859ff30fe4f4023681fb2884fc3bcfc
+short=d079f47
+branch=feature/erp-core-loop
+date=2026-06-19 14:08:28 +0800
+subject=Cover transfer audit and return linkage requirements

@@ -22,8 +22,9 @@ public class InventoryController {
     }
 
     @GetMapping("/stock")
-    public ApiResult<?> stock() {
-        return ApiResult.success(store.stockViews());
+    public ApiResult<?> stock(Authentication authentication) {
+        var user = store.userByUsername(authentication.getName());
+        return ApiResult.success(store.stockViews(user.id));
     }
 
     @GetMapping("/audit/{direction}")

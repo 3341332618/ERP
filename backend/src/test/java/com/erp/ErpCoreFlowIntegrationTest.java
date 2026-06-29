@@ -26,8 +26,15 @@ class ErpCoreFlowIntegrationTest {
 
         assertThat(adminMenus)
             .extracting(menu -> menu.title)
-            .containsExactly("基础信息管理", "采购管理", "库存管理", "销售管理", "结算管理")
+            .containsExactly("基础信息管理", "采购管理", "库存管理", "销售管理", "结算管理", "测试竞赛管理")
             .doesNotContain("个人中心");
+        assertThat(adminMenus.stream()
+            .filter(menu -> "测试竞赛管理".equals(menu.title))
+            .findFirst()
+            .orElseThrow()
+            .children)
+            .extracting(menu -> menu.title)
+            .contains("缺陷库发布", "学员管理", "学员报告评分", "竞赛排行榜");
         assertThat(adminMenus.stream()
             .filter(menu -> "库存管理".equals(menu.title))
             .findFirst()

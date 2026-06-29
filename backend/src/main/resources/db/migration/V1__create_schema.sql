@@ -27,13 +27,14 @@ CREATE TABLE sys_user (
     updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6) COMMENT '更新时间',
     PRIMARY KEY (id),
     UNIQUE KEY uk_user_username (username),
+    UNIQUE KEY uk_user_workspace_id (workspace_id, id),
     KEY idx_user_workspace_role (workspace_id, role_code),
     KEY idx_user_warehouse (warehouse_id),
     CONSTRAINT fk_user_workspace FOREIGN KEY (workspace_id) REFERENCES erp_workspace (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='系统用户';
 
 ALTER TABLE erp_workspace
-    ADD CONSTRAINT fk_workspace_owner FOREIGN KEY (owner_user_id) REFERENCES sys_user (id) ON DELETE SET NULL;
+    ADD CONSTRAINT fk_workspace_owner FOREIGN KEY (id, owner_user_id) REFERENCES sys_user (workspace_id, id);
 
 CREATE TABLE master_brand (
     id BIGINT NOT NULL AUTO_INCREMENT COMMENT '品牌主键',
@@ -44,6 +45,7 @@ CREATE TABLE master_brand (
     created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) COMMENT '创建时间',
     updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6) COMMENT '更新时间',
     PRIMARY KEY (id),
+    UNIQUE KEY uk_brand_workspace_id (workspace_id, id),
     UNIQUE KEY uk_brand_workspace_code (workspace_id, code),
     KEY idx_brand_workspace_name (workspace_id, name),
     CONSTRAINT fk_brand_workspace FOREIGN KEY (workspace_id) REFERENCES erp_workspace (id)
@@ -58,6 +60,7 @@ CREATE TABLE master_category (
     created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) COMMENT '创建时间',
     updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6) COMMENT '更新时间',
     PRIMARY KEY (id),
+    UNIQUE KEY uk_category_workspace_id (workspace_id, id),
     UNIQUE KEY uk_category_workspace_code (workspace_id, code),
     KEY idx_category_workspace_name (workspace_id, name),
     CONSTRAINT fk_category_workspace FOREIGN KEY (workspace_id) REFERENCES erp_workspace (id)
@@ -72,6 +75,7 @@ CREATE TABLE master_unit (
     created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) COMMENT '创建时间',
     updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6) COMMENT '更新时间',
     PRIMARY KEY (id),
+    UNIQUE KEY uk_unit_workspace_id (workspace_id, id),
     UNIQUE KEY uk_unit_workspace_code (workspace_id, code),
     KEY idx_unit_workspace_name (workspace_id, name),
     CONSTRAINT fk_unit_workspace FOREIGN KEY (workspace_id) REFERENCES erp_workspace (id)
@@ -88,13 +92,14 @@ CREATE TABLE master_warehouse (
     created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) COMMENT '创建时间',
     updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6) COMMENT '更新时间',
     PRIMARY KEY (id),
+    UNIQUE KEY uk_warehouse_workspace_id (workspace_id, id),
     UNIQUE KEY uk_warehouse_workspace_code (workspace_id, code),
     KEY idx_warehouse_workspace_name (workspace_id, name),
     CONSTRAINT fk_warehouse_workspace FOREIGN KEY (workspace_id) REFERENCES erp_workspace (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='仓库';
 
 ALTER TABLE sys_user
-    ADD CONSTRAINT fk_user_warehouse FOREIGN KEY (warehouse_id) REFERENCES master_warehouse (id) ON DELETE SET NULL;
+    ADD CONSTRAINT fk_user_warehouse FOREIGN KEY (workspace_id, warehouse_id) REFERENCES master_warehouse (workspace_id, id);
 
 CREATE TABLE master_customer (
     id BIGINT NOT NULL AUTO_INCREMENT COMMENT '客户主键',
@@ -109,6 +114,7 @@ CREATE TABLE master_customer (
     created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) COMMENT '创建时间',
     updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6) COMMENT '更新时间',
     PRIMARY KEY (id),
+    UNIQUE KEY uk_customer_workspace_id (workspace_id, id),
     UNIQUE KEY uk_customer_workspace_code (workspace_id, code),
     KEY idx_customer_workspace_name (workspace_id, name),
     CONSTRAINT fk_customer_workspace FOREIGN KEY (workspace_id) REFERENCES erp_workspace (id)
@@ -127,6 +133,7 @@ CREATE TABLE master_supplier (
     created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) COMMENT '创建时间',
     updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6) COMMENT '更新时间',
     PRIMARY KEY (id),
+    UNIQUE KEY uk_supplier_workspace_id (workspace_id, id),
     UNIQUE KEY uk_supplier_workspace_code (workspace_id, code),
     KEY idx_supplier_workspace_name (workspace_id, name),
     CONSTRAINT fk_supplier_workspace FOREIGN KEY (workspace_id) REFERENCES erp_workspace (id)
@@ -147,14 +154,15 @@ CREATE TABLE master_product (
     created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) COMMENT '创建时间',
     updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6) COMMENT '更新时间',
     PRIMARY KEY (id),
+    UNIQUE KEY uk_product_workspace_id (workspace_id, id),
     UNIQUE KEY uk_product_workspace_code (workspace_id, code),
     KEY idx_product_workspace_name (workspace_id, name),
     KEY idx_product_category (category_id),
     KEY idx_product_brand (brand_id),
     CONSTRAINT fk_product_workspace FOREIGN KEY (workspace_id) REFERENCES erp_workspace (id),
-    CONSTRAINT fk_product_category FOREIGN KEY (category_id) REFERENCES master_category (id),
-    CONSTRAINT fk_product_brand FOREIGN KEY (brand_id) REFERENCES master_brand (id),
-    CONSTRAINT fk_product_unit FOREIGN KEY (unit_id) REFERENCES master_unit (id)
+    CONSTRAINT fk_product_category FOREIGN KEY (workspace_id, category_id) REFERENCES master_category (workspace_id, id),
+    CONSTRAINT fk_product_brand FOREIGN KEY (workspace_id, brand_id) REFERENCES master_brand (workspace_id, id),
+    CONSTRAINT fk_product_unit FOREIGN KEY (workspace_id, unit_id) REFERENCES master_unit (workspace_id, id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='商品';
 
 CREATE TABLE biz_document (
@@ -182,6 +190,7 @@ CREATE TABLE biz_document (
     reject_reason VARCHAR(500) NULL COMMENT '拒绝原因',
     version BIGINT NOT NULL DEFAULT 0 COMMENT '乐观锁版本',
     PRIMARY KEY (id),
+    UNIQUE KEY uk_document_workspace_id (workspace_id, id),
     UNIQUE KEY uk_document_workspace_no (workspace_id, document_no),
     KEY idx_document_workspace_type_status (workspace_id, document_type, document_status),
     KEY idx_document_creator (creator_id, operation_time),
@@ -189,17 +198,18 @@ CREATE TABLE biz_document (
     KEY idx_document_target_warehouse_status (target_warehouse_id, document_status),
     KEY idx_document_related (related_document_id),
     CONSTRAINT fk_document_workspace FOREIGN KEY (workspace_id) REFERENCES erp_workspace (id),
-    CONSTRAINT fk_document_related FOREIGN KEY (related_document_id) REFERENCES biz_document (id),
-    CONSTRAINT fk_document_warehouse FOREIGN KEY (warehouse_id) REFERENCES master_warehouse (id),
-    CONSTRAINT fk_document_target_warehouse FOREIGN KEY (target_warehouse_id) REFERENCES master_warehouse (id),
-    CONSTRAINT fk_document_supplier FOREIGN KEY (supplier_id) REFERENCES master_supplier (id),
-    CONSTRAINT fk_document_customer FOREIGN KEY (customer_id) REFERENCES master_customer (id),
-    CONSTRAINT fk_document_creator FOREIGN KEY (creator_id) REFERENCES sys_user (id),
-    CONSTRAINT fk_document_auditor FOREIGN KEY (auditor_id) REFERENCES sys_user (id)
+    CONSTRAINT fk_document_related FOREIGN KEY (workspace_id, related_document_id) REFERENCES biz_document (workspace_id, id),
+    CONSTRAINT fk_document_warehouse FOREIGN KEY (workspace_id, warehouse_id) REFERENCES master_warehouse (workspace_id, id),
+    CONSTRAINT fk_document_target_warehouse FOREIGN KEY (workspace_id, target_warehouse_id) REFERENCES master_warehouse (workspace_id, id),
+    CONSTRAINT fk_document_supplier FOREIGN KEY (workspace_id, supplier_id) REFERENCES master_supplier (workspace_id, id),
+    CONSTRAINT fk_document_customer FOREIGN KEY (workspace_id, customer_id) REFERENCES master_customer (workspace_id, id),
+    CONSTRAINT fk_document_creator FOREIGN KEY (workspace_id, creator_id) REFERENCES sys_user (workspace_id, id),
+    CONSTRAINT fk_document_auditor FOREIGN KEY (workspace_id, auditor_id) REFERENCES sys_user (workspace_id, id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='ERP业务单据';
 
 CREATE TABLE biz_document_item (
     id BIGINT NOT NULL AUTO_INCREMENT COMMENT '单据明细主键',
+    workspace_id BIGINT NOT NULL COMMENT '所属工作区',
     document_id BIGINT NOT NULL COMMENT '所属单据',
     product_id BIGINT NOT NULL COMMENT '商品',
     product_code_snapshot VARCHAR(40) NOT NULL COMMENT '商品编码快照',
@@ -212,10 +222,11 @@ CREATE TABLE biz_document_item (
     amount DECIMAL(18,2) NOT NULL COMMENT '金额',
     remark VARCHAR(255) NULL COMMENT '备注',
     PRIMARY KEY (id),
-    KEY idx_document_item_document (document_id),
-    KEY idx_document_item_product (product_id),
-    CONSTRAINT fk_document_item_document FOREIGN KEY (document_id) REFERENCES biz_document (id) ON DELETE CASCADE,
-    CONSTRAINT fk_document_item_product FOREIGN KEY (product_id) REFERENCES master_product (id)
+    KEY idx_document_item_document (workspace_id, document_id),
+    KEY idx_document_item_product (workspace_id, product_id),
+    CONSTRAINT fk_document_item_workspace FOREIGN KEY (workspace_id) REFERENCES erp_workspace (id),
+    CONSTRAINT fk_document_item_document FOREIGN KEY (workspace_id, document_id) REFERENCES biz_document (workspace_id, id) ON DELETE CASCADE,
+    CONSTRAINT fk_document_item_product FOREIGN KEY (workspace_id, product_id) REFERENCES master_product (workspace_id, id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='ERP业务单据明细';
 
 CREATE TABLE inventory_balance (
@@ -230,8 +241,8 @@ CREATE TABLE inventory_balance (
     UNIQUE KEY uk_inventory_scope (workspace_id, warehouse_id, product_id),
     KEY idx_inventory_product (workspace_id, product_id),
     CONSTRAINT fk_inventory_workspace FOREIGN KEY (workspace_id) REFERENCES erp_workspace (id),
-    CONSTRAINT fk_inventory_warehouse FOREIGN KEY (warehouse_id) REFERENCES master_warehouse (id),
-    CONSTRAINT fk_inventory_product FOREIGN KEY (product_id) REFERENCES master_product (id)
+    CONSTRAINT fk_inventory_warehouse FOREIGN KEY (workspace_id, warehouse_id) REFERENCES master_warehouse (workspace_id, id),
+    CONSTRAINT fk_inventory_product FOREIGN KEY (workspace_id, product_id) REFERENCES master_product (workspace_id, id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='库存余额';
 
 CREATE TABLE finance_settlement (
@@ -248,7 +259,7 @@ CREATE TABLE finance_settlement (
     UNIQUE KEY uk_settlement_workspace_no (workspace_id, settlement_no),
     KEY idx_settlement_workspace_direction (workspace_id, direction, created_at),
     CONSTRAINT fk_settlement_workspace FOREIGN KEY (workspace_id) REFERENCES erp_workspace (id),
-    CONSTRAINT fk_settlement_document FOREIGN KEY (document_id) REFERENCES biz_document (id)
+    CONSTRAINT fk_settlement_document FOREIGN KEY (workspace_id, document_id) REFERENCES biz_document (workspace_id, id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='收支结算';
 
 CREATE TABLE sys_message (
@@ -304,7 +315,7 @@ CREATE TABLE test_bug_report (
     KEY idx_report_status_time (report_status, submit_time),
     CONSTRAINT chk_report_score CHECK (score BETWEEN 0 AND 100),
     CONSTRAINT fk_report_bug FOREIGN KEY (bug_id) REFERENCES test_bug_definition (id),
-    CONSTRAINT fk_report_student FOREIGN KEY (student_id) REFERENCES sys_user (id) ON DELETE CASCADE,
+    CONSTRAINT fk_report_student FOREIGN KEY (workspace_id, student_id) REFERENCES sys_user (workspace_id, id),
     CONSTRAINT fk_report_workspace FOREIGN KEY (workspace_id) REFERENCES erp_workspace (id),
     CONSTRAINT fk_report_reviewer FOREIGN KEY (reviewer_id) REFERENCES sys_user (id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='学员缺陷报告';
@@ -312,6 +323,7 @@ CREATE TABLE test_bug_report (
 CREATE TABLE test_file_submission (
     id BIGINT NOT NULL AUTO_INCREMENT COMMENT '测试文件提交主键',
     student_id BIGINT NOT NULL COMMENT '提交学员',
+    workspace_id BIGINT NOT NULL COMMENT '学员工作区',
     bug_id VARCHAR(64) NULL COMMENT '关联缺陷',
     title VARCHAR(200) NOT NULL COMMENT '提交标题',
     module_name VARCHAR(100) NOT NULL COMMENT '测试模块',
@@ -330,7 +342,8 @@ CREATE TABLE test_file_submission (
     KEY idx_file_student_time (student_id, submit_time),
     KEY idx_file_status_time (submission_status, submit_time),
     CONSTRAINT chk_file_score CHECK (score BETWEEN 0 AND 100),
-    CONSTRAINT fk_file_student FOREIGN KEY (student_id) REFERENCES sys_user (id) ON DELETE CASCADE,
+    CONSTRAINT fk_file_workspace FOREIGN KEY (workspace_id) REFERENCES erp_workspace (id),
+    CONSTRAINT fk_file_student FOREIGN KEY (workspace_id, student_id) REFERENCES sys_user (workspace_id, id),
     CONSTRAINT fk_file_bug FOREIGN KEY (bug_id) REFERENCES test_bug_definition (id),
     CONSTRAINT fk_file_reviewer FOREIGN KEY (reviewer_id) REFERENCES sys_user (id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='测试文件提交';
@@ -339,6 +352,7 @@ CREATE TABLE test_ranking_history (
     id BIGINT NOT NULL AUTO_INCREMENT COMMENT '评分历史主键',
     round_name VARCHAR(100) NOT NULL COMMENT '竞赛轮次',
     student_id BIGINT NOT NULL COMMENT '学员',
+    workspace_id BIGINT NOT NULL COMMENT '学员工作区',
     total_score INT NOT NULL DEFAULT 0 COMMENT '累计得分',
     approved_reports INT NOT NULL DEFAULT 0 COMMENT '通过报告数',
     approved_files INT NOT NULL DEFAULT 0 COMMENT '通过文件数',
@@ -346,7 +360,8 @@ CREATE TABLE test_ranking_history (
     PRIMARY KEY (id),
     KEY idx_ranking_round_score (round_name, total_score),
     KEY idx_ranking_student_time (student_id, created_at),
-    CONSTRAINT fk_ranking_student FOREIGN KEY (student_id) REFERENCES sys_user (id) ON DELETE CASCADE
+    CONSTRAINT fk_ranking_workspace FOREIGN KEY (workspace_id) REFERENCES erp_workspace (id),
+    CONSTRAINT fk_ranking_student FOREIGN KEY (workspace_id, student_id) REFERENCES sys_user (workspace_id, id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='竞赛评分历史';
 
 CREATE TABLE test_operation_log (
@@ -360,6 +375,6 @@ CREATE TABLE test_operation_log (
     PRIMARY KEY (id),
     KEY idx_operation_student_time (student_id, created_at),
     KEY idx_operation_module_time (module_name, created_at),
-    CONSTRAINT fk_operation_student FOREIGN KEY (student_id) REFERENCES sys_user (id) ON DELETE CASCADE,
+    CONSTRAINT fk_operation_student FOREIGN KEY (workspace_id, student_id) REFERENCES sys_user (workspace_id, id),
     CONSTRAINT fk_operation_workspace FOREIGN KEY (workspace_id) REFERENCES erp_workspace (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='学员操作日志';

@@ -16,7 +16,8 @@ const routes: RouteRecordRaw[] = [
       { path: 'inventory/stock', name: '库存分布', component: () => import('../views/StockView.vue') },
       { path: 'inventory/transfer', name: '库存调拨', component: () => import('../views/DocumentView.vue') },
       { path: 'inventory/:type', name: '库存业务', component: () => import('../views/AuditView.vue') },
-      { path: 'settlement/:type', name: '结算管理', component: () => import('../views/SettlementView.vue') }
+      { path: 'settlement/:type', name: '结算管理', component: () => import('../views/SettlementView.vue') },
+      { path: 'competition/:type', name: '测试竞赛', component: () => import('../views/CompetitionView.vue') }
     ]
   }
 ]
