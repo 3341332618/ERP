@@ -5,18 +5,16 @@ import com.erp.domain.ErpModels.BugReportStatus;
 import com.erp.domain.ErpModels.CompetitionSubmissionStatus;
 import com.erp.domain.ErpModels.RoleCode;
 import com.erp.store.ErpStore;
+import com.erp.support.InMemoryBusinessTest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.test.annotation.DirtiesContext;
 
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-@SpringBootTest
-@DirtiesContext(classMode = DirtiesContext.ClassMode.BEFORE_EACH_TEST_METHOD)
+@InMemoryBusinessTest
 class TrainingCompetitionIntegrationTest {
     @Autowired
     ErpStore store;

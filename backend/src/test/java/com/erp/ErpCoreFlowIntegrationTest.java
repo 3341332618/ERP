@@ -4,9 +4,9 @@ import com.erp.store.ErpStore;
 import com.erp.common.BusinessException;
 import com.erp.domain.ErpModels.RoleCode;
 import com.erp.domain.ErpModels.Status;
+import com.erp.support.InMemoryBusinessTest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -15,7 +15,7 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-@SpringBootTest
+@InMemoryBusinessTest
 class ErpCoreFlowIntegrationTest {
     @Autowired
     ErpStore store;
