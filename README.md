@@ -526,6 +526,7 @@ docker compose up -d mysql
 
 ## 相关文档
 
+- [整体操作手册](docs/operation-manual.md)
 - [项目展示与答辩说明](docs/project-showcase.md)
 - [MySQL 持久化迁移设计](docs/superpowers/specs/2026-06-21-mysql-persistence-design.md)
 - [MySQL 持久化执行计划](docs/superpowers/plans/2026-06-21-mysql-persistence.md)
