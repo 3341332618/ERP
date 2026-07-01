@@ -37,7 +37,7 @@ This project is suitable for coursework, training labs, ERP process demos, and f
 | Sales | Sales outbound, sales return, edit, submit, delete, detail view |
 | Inventory | Stock distribution, inbound/outbound audit, approve/reject, stock transfer, warehouse notifications |
 | Settlement | Income and expense settlement, settlement details, related business document view |
-| Testing competition | Defect library, student accounts, independent testing, defect reports, test files, scoring, operation logs, ranking |
+| Testing competition | Defect library, student accounts, generated student ERP subaccounts, independent testing, defect reports, test files, scoring, operation logs, ranking |
 
 ## Business Flow
 
@@ -51,7 +51,7 @@ Draft → Pending audit → Approved / Rejected
 Inventory mutation + settlement generation + warehouse notification
 ```
 
-Published defects enable corresponding wrong system behavior, but students do not see the defect IDs, summaries, or task list. Students must explore the ERP workspace and submit their own findings.
+Published defects enable corresponding wrong system behavior, but students do not see the defect IDs, summaries, or task list. Each student has an isolated ERP workspace and generated role accounts for purchasing, warehouse, sales, and settlement operations. Students explore the ERP workspace with those role accounts, then use the main student account to submit findings.
 
 ## Tech Stack
 
@@ -151,8 +151,14 @@ All built-in accounts use the initial password:
 | `warehouse_manager` | Warehouse manager | Inventory and audit workflows |
 | `sales_manager` | Sales manager | Sales module and sales documents |
 | `settlement_manager` | Settlement manager | Income and expense settlement |
-| `student01` | Student | Independent ERP workspace and testing competition |
-| `student02` | Student | Independent ERP workspace and testing competition |
+| `student01` | Student main account | Submit defect reports, upload test files, view personal records and rankings |
+| `student01_purchase_staff` | Student ERP purchase staff | Create purchase inbound and purchase return documents in `student01` workspace |
+| `student01_warehouse_staff` | Student ERP warehouse staff | Audit inbound, outbound, and transfer documents in `student01` workspace |
+| `student01_sales_staff` | Student ERP sales staff | Create sales outbound and sales return documents in `student01` workspace |
+| `student01_settlement_manager` | Student ERP settlement manager | View income and expense settlements in `student01` workspace |
+| `student02` | Student main account | Same workflow with an isolated `student02` workspace |
+
+Student ERP subaccounts are isolated by workspace. For example, `student01_warehouse_staff` cannot see or audit `student02` documents.
 
 ## Test and Build
 

@@ -61,8 +61,8 @@ public class ErpStore {
         createUser("sales_manager", "销售主管", "13800000006", RoleCode.SALES_MANAGER, null);
         createUser("sales_staff", "销售专员", "13800000007", RoleCode.SALES_STAFF, null);
         createUser("settlement_manager", "结算主管", "13800000008", RoleCode.SETTLEMENT_MANAGER, null);
-        createUser("student01", "测试学员一", "13900000001", RoleCode.STUDENT, null);
-        createUser("student02", "测试学员二", "13900000002", RoleCode.STUDENT, null);
+        createStudentWorkspace("student01", "测试学员一", "13900000001", "123456");
+        createStudentWorkspace("student02", "测试学员二", "13900000002", "123456");
 
         var brand = createMaster("brand", Map.of("name", "连想"));
         var category = createMaster("category", Map.of("name", "办公设备"));
@@ -106,6 +106,10 @@ public class ErpStore {
     }
 
     private User createUser(String username, String name, String phone, RoleCode role, Long warehouseId, String password) {
+        return createUser(username, name, phone, role, warehouseId, password, null);
+    }
+
+    private User createUser(String username, String name, String phone, RoleCode role, Long warehouseId, String password, Long workspaceOwnerId) {
         var user = new User();
         user.id = ids.incrementAndGet();
         user.username = username;
@@ -114,8 +118,29 @@ public class ErpStore {
         user.phone = phone;
         user.role = role;
         user.warehouseId = warehouseId;
+        user.workspaceOwnerId = workspaceOwnerId;
         users.put(user.id, user);
         return user;
+    }
+
+    private User createStudentWorkspace(String username, String name, String phone, String password) {
+        var student = createUser(username, name, phone, RoleCode.STUDENT, null, password);
+        student.workspaceOwnerId = student.id;
+        createStudentErpAccount(student, "_purchase_staff", "采购专员", RoleCode.PURCHASE_STAFF, password);
+        var warehouseStaff = createStudentErpAccount(student, "_warehouse_staff", "仓库专员", RoleCode.WAREHOUSE_STAFF, password);
+        createStudentErpAccount(student, "_sales_staff", "销售专员", RoleCode.SALES_STAFF, password);
+        createStudentErpAccount(student, "_settlement_manager", "结算主管", RoleCode.SETTLEMENT_MANAGER, password);
+        createMaster("warehouse", Map.of(
+            "name", name + "ERP仓库",
+            "phone", phone,
+            "address", "学员独立ERP工作区",
+            "warehouseUserId", warehouseStaff.id.toString()
+        ), student.id, false);
+        return student;
+    }
+
+    private User createStudentErpAccount(User student, String suffix, String roleLabel, RoleCode role, String password) {
+        return createUser(student.username + suffix, student.name + roleLabel, student.phone, role, null, password, student.id);
     }
 
     public User userByUsername(String username) {
@@ -165,11 +190,6 @@ public class ErpStore {
             menus.add(settlementMenu());
         }
         if (role == RoleCode.STUDENT) {
-            menus.add(baseInfoMenu());
-            menus.add(purchaseMenu());
-            menus.add(inventoryMenu());
-            menus.add(salesMenu());
-            menus.add(settlementMenu());
             menus.add(competitionStudentMenu());
         }
         return menus;
@@ -272,7 +292,7 @@ public class ErpStore {
             throw new BusinessException("学员账号已存在，请重新输入。");
         }
         var password = textOrDefault(payload, "password", "123456");
-        return studentView(createUser(username, name, phone, RoleCode.STUDENT, null, password));
+        return studentView(createStudentWorkspace(username, name, phone, password));
     }
 
     public void deleteStudent(Long operatorId, Long studentId) {
@@ -281,7 +301,16 @@ public class ErpStore {
         if (student.role != RoleCode.STUDENT) {
             throw new BusinessException("只能删除测试学员账号。");
         }
-        users.remove(student.id);
+        var removedUserIds = users.values().stream()
+            .filter(user -> user.id.equals(student.id) || Objects.equals(user.workspaceOwnerId, student.id))
+            .map(user -> user.id)
+            .toList();
+        users.keySet().removeIf(removedUserIds::contains);
+        master.entrySet().removeIf(entry -> Objects.equals(entry.getValue().workspaceOwnerId, student.id));
+        documents.entrySet().removeIf(entry -> Objects.equals(entry.getValue().workspaceOwnerId, student.id));
+        stocks.removeIf(stock -> Objects.equals(stock.workspaceOwnerId, student.id));
+        settlements.removeIf(settlement -> Objects.equals(settlement.workspaceOwnerId, student.id));
+        messages.removeIf(message -> removedUserIds.contains(message.userId));
         bugReports.removeIf(report -> report.studentId.equals(student.id));
         competitionFiles.removeIf(file -> file.studentId.equals(student.id));
         studentOperationLogs.removeIf(log -> log.studentId.equals(student.id));
@@ -497,6 +526,10 @@ public class ErpStore {
     }
 
     public MasterRecord createMaster(String type, Map<String, String> payload, Long userId) {
+        return createMaster(type, payload, userId, true);
+    }
+
+    private MasterRecord createMaster(String type, Map<String, String> payload, Long userId, boolean recordOperation) {
         var ownerId = workspaceOwnerId(userId);
         var name = validatedMasterName(type, null, payload.get("name"), ownerId);
         var record = new MasterRecord();
@@ -520,7 +553,7 @@ public class ErpStore {
         record.workspaceOwnerId = ownerId;
         master.put(type + ":" + record.id, record);
         bindWarehouseStaff(record);
-        if (ownerId != null) {
+        if (recordOperation && ownerId != null) {
             recordStudentOperation(ownerId, displayName(type), "新增资料", record.name);
         }
         return record;
@@ -844,16 +877,15 @@ public class ErpStore {
 
     public List<DocumentRecord> auditList(String direction, Long userId) {
         var user = userById(userId);
+        var ownerId = workspaceOwnerId(userId);
         Predicate<DocumentRecord> directionFilter = "inbound".equals(direction)
             ? document -> document.type.inbound || document.type == DocumentType.STOCK_TRANSFER
             : document -> document.type.outbound;
         return documents.values().stream()
             .filter(directionFilter)
             .filter(document -> document.status != DocumentStatus.DRAFT)
-            .filter(document -> user.role == RoleCode.STUDENT || document.workspaceOwnerId == null)
-            .filter(document -> user.role == RoleCode.STUDENT
-                ? Objects.equals(document.workspaceOwnerId, user.id)
-                : user.role == RoleCode.WAREHOUSE_MANAGER
+            .filter(document -> Objects.equals(document.workspaceOwnerId, ownerId))
+            .filter(document -> user.role == RoleCode.WAREHOUSE_MANAGER
                 || (user.role == RoleCode.WAREHOUSE_STAFF && documentAuditWarehouseMatches(user, document, direction)))
             .sorted(Comparator.comparing((DocumentRecord document) -> document.operationTime).reversed())
             .toList();
@@ -862,16 +894,16 @@ public class ErpStore {
     public synchronized DocumentRecord approve(Long id, Long auditorId) {
         var auditor = userById(auditorId);
         var document = getDocument(id);
-        if (auditor.role == RoleCode.STUDENT && !Objects.equals(document.workspaceOwnerId, auditor.id)) {
-            throw new BusinessException("只能审核本人测试工作区单据");
+        if (!Objects.equals(document.workspaceOwnerId, workspaceOwnerId(auditor.id))) {
+            throw new BusinessException("只能审核所属工作区单据");
         }
-        if (auditor.role != RoleCode.WAREHOUSE_STAFF && auditor.role != RoleCode.STUDENT) {
+        if (auditor.role != RoleCode.WAREHOUSE_STAFF) {
             throw new BusinessException("当前角色无审核权限");
         }
         if (document.status != DocumentStatus.PENDING) {
             throw new BusinessException("当前状态不可审核");
         }
-        if (auditor.role != RoleCode.STUDENT && !documentWarehouseMatches(auditor, document)) {
+        if (!documentWarehouseMatches(auditor, document)) {
             throw new BusinessException("只能审核所属仓库单据");
         }
         applyStock(document);
@@ -894,10 +926,10 @@ public class ErpStore {
         }
         var auditor = userById(auditorId);
         var document = getDocument(id);
-        if (auditor.role == RoleCode.STUDENT && !Objects.equals(document.workspaceOwnerId, auditor.id)) {
-            throw new BusinessException("只能审核本人测试工作区单据");
+        if (!Objects.equals(document.workspaceOwnerId, workspaceOwnerId(auditor.id))) {
+            throw new BusinessException("只能审核所属工作区单据");
         }
-        if (auditor.role != RoleCode.WAREHOUSE_STAFF && auditor.role != RoleCode.STUDENT) {
+        if (auditor.role != RoleCode.WAREHOUSE_STAFF) {
             throw new BusinessException("当前角色无审核权限");
         }
         document.status = DocumentStatus.REJECTED;
@@ -989,8 +1021,14 @@ public class ErpStore {
     }
 
     public List<MasterRecord> usersByRole(RoleCode role) {
+        return usersByRole(role, null);
+    }
+
+    public List<MasterRecord> usersByRole(RoleCode role, Long userId) {
+        var ownerId = workspaceOwnerId(userId);
         return users.values().stream()
             .filter(user -> user.role == role)
+            .filter(user -> Objects.equals(workspaceOwnerId(user.id), ownerId))
             .map(user -> {
                 var record = new MasterRecord();
                 record.id = user.id;
@@ -1220,7 +1258,7 @@ public class ErpStore {
 
     private boolean canSeeDocument(User user, DocumentRecord document) {
         var ownerId = workspaceOwnerId(user.id);
-        if (!workspaceVisible(document.workspaceOwnerId, ownerId)) {
+        if (!Objects.equals(document.workspaceOwnerId, ownerId)) {
             return false;
         }
         return switch (user.role) {
@@ -1232,12 +1270,18 @@ public class ErpStore {
     }
 
     private boolean documentWarehouseMatches(User user, DocumentRecord document) {
+        if (!Objects.equals(document.workspaceOwnerId, workspaceOwnerId(user.id))) {
+            return false;
+        }
         return user.warehouseId == null
             || user.warehouseId.equals(document.warehouseId)
             || user.warehouseId.equals(document.targetWarehouseId);
     }
 
     private boolean documentAuditWarehouseMatches(User user, DocumentRecord document, String direction) {
+        if (!Objects.equals(document.workspaceOwnerId, workspaceOwnerId(user.id))) {
+            return false;
+        }
         if (user.warehouseId == null) {
             return true;
         }
@@ -1261,6 +1305,7 @@ public class ErpStore {
     private void notifyWarehouse(DocumentRecord document, Long warehouseId, String title) {
         users.values().stream()
             .filter(user -> user.role == RoleCode.WAREHOUSE_STAFF)
+            .filter(user -> Objects.equals(workspaceOwnerId(user.id), document.workspaceOwnerId))
             .filter(user -> user.warehouseId == null || user.warehouseId.equals(warehouseId))
             .forEach(user -> {
                 var message = new Message();
@@ -1386,8 +1431,16 @@ public class ErpStore {
     }
 
     private MasterRecord first(String type, Long ownerId) {
+        var exact = master.values().stream()
+            .filter(record -> Objects.equals(record.workspaceOwnerId, ownerId))
+            .filter(record -> record.type.equals(type))
+            .findFirst()
+            .orElse(null);
+        if (exact != null) {
+            return exact;
+        }
         return master.values().stream()
-            .filter(record -> workspaceVisible(record.workspaceOwnerId, ownerId))
+            .filter(record -> record.workspaceOwnerId == null)
             .filter(record -> record.type.equals(type))
             .findFirst()
             .orElseThrow(() -> new BusinessException(displayName(type) + "不存在"));
@@ -1584,7 +1637,10 @@ public class ErpStore {
             return null;
         }
         var user = userById(userId);
-        return user.role == RoleCode.STUDENT ? user.id : null;
+        if (user.role == RoleCode.STUDENT) {
+            return user.id;
+        }
+        return user.workspaceOwnerId;
     }
 
     private boolean workspaceVisible(Long recordOwnerId, Long currentOwnerId) {
@@ -1633,6 +1689,20 @@ public class ErpStore {
         student.phone = user.phone;
         student.status = user.status;
         student.createTime = user.createTime;
+        student.erpAccounts = users.values().stream()
+            .filter(account -> Objects.equals(account.workspaceOwnerId, user.id))
+            .filter(account -> account.id != null && !account.id.equals(user.id))
+            .sorted(Comparator.comparing(account -> account.username))
+            .map(account -> {
+                var workspaceAccount = new StudentWorkspaceAccount();
+                workspaceAccount.id = account.id;
+                workspaceAccount.username = account.username;
+                workspaceAccount.name = account.name;
+                workspaceAccount.role = account.role;
+                workspaceAccount.roleName = account.role.label;
+                return workspaceAccount;
+            })
+            .toList();
         return student;
     }
 

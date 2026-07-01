@@ -94,6 +94,7 @@ public final class ErpModels {
         public Status status = Status.ENABLED;
         public LocalDateTime createTime = LocalDateTime.now();
         public Long warehouseId;
+        public Long workspaceOwnerId;
     }
 
     public static class StudentAccount {
@@ -103,6 +104,15 @@ public final class ErpModels {
         public String phone;
         public Status status;
         public LocalDateTime createTime;
+        public List<StudentWorkspaceAccount> erpAccounts = new ArrayList<>();
+    }
+
+    public static class StudentWorkspaceAccount {
+        public Long id;
+        public String username;
+        public String name;
+        public RoleCode role;
+        public String roleName;
     }
 
     public static class MenuNode {

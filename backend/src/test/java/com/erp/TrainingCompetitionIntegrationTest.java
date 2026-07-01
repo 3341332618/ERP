@@ -222,6 +222,121 @@ class TrainingCompetitionIntegrationTest {
     }
 
     @Test
+    void creatingStudentAutomaticallyCreatesRoleSpecificErpAccounts() {
+        var admin = store.userByUsername("admin");
+
+        var created = store.createStudent(admin.id, Map.of(
+            "username", "student_auto",
+            "name", "自动学员",
+            "phone", "13900000999",
+            "password", "654321"
+        ));
+
+        assertThat(created.erpAccounts)
+            .extracting(account -> account.username)
+            .containsExactlyInAnyOrder(
+                "student_auto_purchase_staff",
+                "student_auto_warehouse_staff",
+                "student_auto_sales_staff",
+                "student_auto_settlement_manager"
+            );
+        assertThat(store.userByUsername("student_auto_purchase_staff").role).isEqualTo(RoleCode.PURCHASE_STAFF);
+        assertThat(store.userByUsername("student_auto_warehouse_staff").role).isEqualTo(RoleCode.WAREHOUSE_STAFF);
+        assertThat(store.userByUsername("student_auto_sales_staff").role).isEqualTo(RoleCode.SALES_STAFF);
+        assertThat(store.userByUsername("student_auto_settlement_manager").role).isEqualTo(RoleCode.SETTLEMENT_MANAGER);
+        assertThat(store.userByUsername("student_auto_purchase_staff").workspaceOwnerId).isEqualTo(created.id);
+        assertThat(store.userByUsername("student_auto_warehouse_staff").workspaceOwnerId).isEqualTo(created.id);
+        assertThat(store.userByUsername("student_auto_sales_staff").workspaceOwnerId).isEqualTo(created.id);
+        assertThat(store.userByUsername("student_auto_settlement_manager").workspaceOwnerId).isEqualTo(created.id);
+    }
+
+    @Test
+    void studentMainAccountUsesCompetitionOnlyAndErpSubaccountsUseOwnedWorkspace() {
+        var student = store.userByUsername("student01");
+        var studentTwo = store.userByUsername("student02");
+        var purchase = store.userByUsername("student01_purchase_staff");
+        var warehouse = store.userByUsername("student01_warehouse_staff");
+        var settlement = store.userByUsername("student01_settlement_manager");
+        var studentTwoPurchase = store.userByUsername("student02_purchase_staff");
+        var studentTwoWarehouse = store.userByUsername("student02_warehouse_staff");
+        var studentTwoSettlement = store.userByUsername("student02_settlement_manager");
+
+        assertThat(store.menus(student.role))
+            .extracting(menu -> menu.title)
+            .containsExactly("测试竞赛");
+        assertThat(store.menus(purchase.role))
+            .extracting(menu -> menu.title)
+            .containsExactly("采购管理");
+        assertThat(store.menus(warehouse.role))
+            .extracting(menu -> menu.title)
+            .containsExactly("库存管理");
+        assertThat(store.menus(settlement.role))
+            .extracting(menu -> menu.title)
+            .containsExactly("结算管理");
+
+        var inbound = store.createSimpleDocument("purchase-inbound", purchase.id);
+        assertThat(inbound.workspaceOwnerId).isEqualTo(student.id);
+        assertThat(inbound.workspaceOwnerId).isNotEqualTo(studentTwo.id);
+        store.submitDocument(inbound.id, purchase.id);
+
+        assertThat(store.documents("purchase-inbound", studentTwoPurchase.id))
+            .extracting(document -> document.documentNo)
+            .doesNotContain(inbound.documentNo);
+        assertThat(store.auditList("inbound", store.userByUsername("warehouse_staff").id))
+            .extracting(document -> document.documentNo)
+            .doesNotContain(inbound.documentNo);
+        assertThat(store.auditList("inbound", studentTwoWarehouse.id))
+            .extracting(document -> document.documentNo)
+            .doesNotContain(inbound.documentNo);
+        assertThat(store.auditList("inbound", warehouse.id))
+            .extracting(document -> document.documentNo)
+            .contains(inbound.documentNo);
+
+        store.approve(inbound.id, warehouse.id);
+
+        assertThat(store.stockViews(warehouse.id)).isNotEmpty();
+        assertThat(store.stockViews(studentTwoWarehouse.id)).isEmpty();
+        assertThat(store.settlements("expense", settlement.id))
+            .extracting(record -> record.relatedDocumentNo)
+            .contains(inbound.documentNo);
+        assertThat(store.settlements("expense", studentTwoSettlement.id))
+            .extracting(record -> record.relatedDocumentNo)
+            .doesNotContain(inbound.documentNo);
+        assertThat(store.studentOperationLogs(store.userByUsername("superadmin").id, student.id))
+            .extracting(log -> log.moduleName)
+            .contains("采购入库");
+    }
+
+    @Test
+    void deletingStudentRemovesSubaccountsAndWorkspaceData() {
+        var admin = store.userByUsername("admin");
+        var created = store.createStudent(admin.id, Map.of(
+            "username", "student_delete",
+            "name", "删除学员",
+            "phone", "13900000888"
+        ));
+        var purchase = store.userByUsername("student_delete_purchase_staff");
+        var warehouse = store.userByUsername("student_delete_warehouse_staff");
+
+        var inbound = store.createSimpleDocument("purchase-inbound", purchase.id);
+        store.submitDocument(inbound.id, purchase.id);
+        store.approve(inbound.id, warehouse.id);
+        assertThat(store.stockViews(warehouse.id)).isNotEmpty();
+
+        store.deleteStudent(admin.id, created.id);
+
+        assertThatThrownBy(() -> store.userByUsername("student_delete"))
+            .isInstanceOf(BusinessException.class)
+            .hasMessageContaining("登录账号不存在");
+        assertThatThrownBy(() -> store.userByUsername("student_delete_purchase_staff"))
+            .isInstanceOf(BusinessException.class)
+            .hasMessageContaining("登录账号不存在");
+        assertThat(store.bugRankings())
+            .extracting(row -> row.get("studentName"))
+            .doesNotContain("删除学员");
+    }
+
+    @Test
     void superAdminCanReceiveReviewCompetitionFilesAndCreateRankingHistory() {
         var superAdmin = store.userByUsername("superadmin");
         var student = store.userByUsername("student01");
@@ -302,37 +417,46 @@ class TrainingCompetitionIntegrationTest {
     void studentBusinessWorkspaceIsIsolatedAcrossMasterDocumentsStockAndSettlement() {
         var studentOne = store.userByUsername("student01");
         var studentTwo = store.userByUsername("student02");
+        var studentOnePurchase = store.userByUsername("student01_purchase_staff");
+        var studentOneWarehouse = store.userByUsername("student01_warehouse_staff");
+        var studentOneSettlement = store.userByUsername("student01_settlement_manager");
+        var studentTwoPurchase = store.userByUsername("student02_purchase_staff");
+        var studentTwoWarehouse = store.userByUsername("student02_warehouse_staff");
+        var studentTwoSettlement = store.userByUsername("student02_settlement_manager");
 
         assertThat(store.menus(RoleCode.STUDENT))
             .extracting(menu -> menu.title)
-            .contains("基础信息管理", "采购管理", "库存管理", "销售管理", "结算管理", "测试竞赛");
+            .containsExactly("测试竞赛");
+        assertThat(store.menus(RoleCode.PURCHASE_STAFF))
+            .extracting(menu -> menu.title)
+            .containsExactly("采购管理");
 
-        var privateBrand = store.createMaster("brand", Map.of("name", "学生一私有品牌"), studentOne.id);
+        var privateBrand = store.createMaster("brand", Map.of("name", "学生一私有品牌"), studentOnePurchase.id);
         assertThat(privateBrand.workspaceOwnerId).isEqualTo(studentOne.id);
-        assertThat(store.masters("brand", null, null, studentOne.id))
+        assertThat(store.masters("brand", null, null, studentOnePurchase.id))
             .extracting(record -> record.name)
             .contains("学生一私有品牌");
-        assertThat(store.masters("brand", null, null, studentTwo.id))
+        assertThat(store.masters("brand", null, null, studentTwoPurchase.id))
             .extracting(record -> record.name)
             .doesNotContain("学生一私有品牌");
         assertThat(store.masters("brand", null, null))
             .extracting(record -> record.name)
             .doesNotContain("学生一私有品牌");
 
-        var inbound = store.createSimpleDocument("purchase-inbound", studentOne.id);
+        var inbound = store.createSimpleDocument("purchase-inbound", studentOnePurchase.id);
         assertThat(inbound.workspaceOwnerId).isEqualTo(studentOne.id);
-        assertThat(store.documents("purchase-inbound", studentTwo.id))
+        assertThat(store.documents("purchase-inbound", studentTwoPurchase.id))
             .extracting(document -> document.documentNo)
             .doesNotContain(inbound.documentNo);
 
-        store.submitDocument(inbound.id, studentOne.id);
-        store.approve(inbound.id, studentOne.id);
+        store.submitDocument(inbound.id, studentOnePurchase.id);
+        store.approve(inbound.id, studentOneWarehouse.id);
 
-        assertThat(store.stockViews(studentOne.id)).isNotEmpty();
-        assertThat(store.stockViews(studentTwo.id)).isEmpty();
-        assertThat(store.settlements("expense", studentOne.id))
+        assertThat(store.stockViews(studentOneWarehouse.id)).isNotEmpty();
+        assertThat(store.stockViews(studentTwoWarehouse.id)).isEmpty();
+        assertThat(store.settlements("expense", studentOneSettlement.id))
             .anySatisfy(settlement -> assertThat(settlement.relatedDocumentNo).isEqualTo(inbound.documentNo));
-        assertThat(store.settlements("expense", studentTwo.id))
+        assertThat(store.settlements("expense", studentTwoSettlement.id))
             .extracting(settlement -> settlement.relatedDocumentNo)
             .doesNotContain(inbound.documentNo);
         assertThat(store.studentOperationLogs(store.userByUsername("superadmin").id, studentOne.id))

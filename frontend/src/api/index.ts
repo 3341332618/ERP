@@ -141,6 +141,15 @@ export interface StudentAccount {
   phone: string
   status: string
   createTime: string
+  erpAccounts: StudentWorkspaceAccount[]
+}
+
+export interface StudentWorkspaceAccount {
+  id: number
+  username: string
+  name: string
+  role: string
+  roleName: string
 }
 
 export interface CompetitionFileSubmission {

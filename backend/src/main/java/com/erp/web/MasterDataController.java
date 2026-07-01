@@ -61,7 +61,8 @@ public class MasterDataController {
     }
 
     @GetMapping("/warehouse-staff")
-    public ApiResult<?> warehouseStaff() {
-        return ApiResult.success(store.usersByRole(RoleCode.WAREHOUSE_STAFF));
+    public ApiResult<?> warehouseStaff(Authentication authentication) {
+        var user = store.userByUsername(authentication.getName());
+        return ApiResult.success(store.usersByRole(RoleCode.WAREHOUSE_STAFF, user.id));
     }
 }

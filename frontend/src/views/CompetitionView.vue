@@ -76,11 +76,21 @@
         <div class="toolbar">
           <el-input v-model="query.keyword" placeholder="请输入学员账号/姓名查询" clearable style="width: 260px" />
         </div>
+        <div class="dialog-tip">新增学员后会自动生成采购专员、仓库专员、销售专员、结算主管 4 个 ERP子账号，不同学员的数据互相隔离。</div>
         <el-table :data="filteredStudents" border empty-text="暂无学员数据">
           <el-table-column type="index" label="序号" width="70" />
           <el-table-column prop="username" label="学员账号" min-width="150" />
           <el-table-column prop="name" label="学员姓名" min-width="150" />
           <el-table-column prop="phone" label="联系电话" width="150" />
+          <el-table-column label="ERP子账号" min-width="320">
+            <template #default="{ row }">
+              <div class="erp-account-list">
+                <el-tag v-for="account in row.erpAccounts" :key="account.id" type="info" effect="plain">
+                  {{ account.roleName }}：{{ account.username }}
+                </el-tag>
+              </div>
+            </template>
+          </el-table-column>
           <el-table-column label="账号状态" width="110">
             <template #default="{ row }">
               <el-tag :type="row.status === 'ENABLED' ? 'success' : 'info'">{{ row.status === 'ENABLED' ? '启用' : '禁用' }}</el-tag>
@@ -680,5 +690,11 @@ onMounted(load)
 .file-input {
   width: 100%;
   padding: 8px 0;
+}
+
+.erp-account-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 </style>
