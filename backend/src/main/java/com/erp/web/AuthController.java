@@ -39,14 +39,14 @@ public class AuthController {
         return ApiResult.success(Map.of(
             "token", jwtService.createToken(user.username, user.role.name()),
             "user", userView(user),
-            "menus", store.menus(user.role)
+            "menus", store.menus(user)
         ));
     }
 
     @GetMapping("/me")
     public ApiResult<Map<String, Object>> me(Authentication authentication) {
         var user = store.userByUsername(authentication.getName());
-        return ApiResult.success(Map.of("user", userView(user), "menus", store.menus(user.role)));
+        return ApiResult.success(Map.of("user", userView(user), "menus", store.menus(user)));
     }
 
     @PostMapping("/change-password")

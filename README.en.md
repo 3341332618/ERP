@@ -51,7 +51,7 @@ Draft → Pending audit → Approved / Rejected
 Inventory mutation + settlement generation + warehouse notification
 ```
 
-Published defects enable corresponding wrong system behavior, but students do not see the defect IDs, summaries, or task list. Each student has an isolated ERP workspace and generated role accounts for purchasing, warehouse, sales, and settlement operations. Students explore the ERP workspace with those role accounts, then use the main student account to submit findings.
+Published defects enable corresponding wrong system behavior, but students do not see the defect IDs, summaries, or task list. Each student has an isolated ERP workspace and generated role accounts for workspace administration, purchasing, warehouse, sales, and settlement operations. Students first sign in with the main account such as `student01`, click "Enter my ERP workspace", choose a role, and enter the password. The frontend automatically uses the matching `student01_*` account, so students do not type the prefix manually.
 
 ## Tech Stack
 
@@ -152,13 +152,14 @@ All built-in accounts use the initial password:
 | `sales_manager` | Sales manager | Sales module and sales documents |
 | `settlement_manager` | Settlement manager | Income and expense settlement |
 | `student01` | Student main account | Submit defect reports, upload test files, view personal records and rankings |
+| `student01_admin` | Student ERP administrator | Maintain master data and view ERP modules in the `student01` workspace; no platform defect publishing or student-management permission |
 | `student01_purchase_staff` | Student ERP purchase staff | Create purchase inbound and purchase return documents in `student01` workspace |
 | `student01_warehouse_staff` | Student ERP warehouse staff | Audit inbound, outbound, and transfer documents in `student01` workspace |
 | `student01_sales_staff` | Student ERP sales staff | Create sales outbound and sales return documents in `student01` workspace |
 | `student01_settlement_manager` | Student ERP settlement manager | View income and expense settlements in `student01` workspace |
 | `student02` | Student main account | Same workflow with an isolated `student02` workspace |
 
-Student ERP subaccounts are isolated by workspace. For example, `student01_warehouse_staff` cannot see or audit `student02` documents.
+Student ERP subaccounts are isolated by workspace. For example, `student01_warehouse_staff` cannot see or audit `student02` documents. In the secondary ERP login, students choose a role and enter the password; the UI composes accounts such as `student01_admin` and `student01_purchase_staff` automatically.
 
 ## Test and Build
 

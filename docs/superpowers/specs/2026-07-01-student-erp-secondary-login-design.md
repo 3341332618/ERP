@@ -5,7 +5,7 @@
 当前系统已经把学员拆成两类账号：
 
 - 学员主账号：例如 `student01`，用于进入测试竞赛端，提交缺陷报告和附件。
-- 学员 ERP 子账号：例如 `student01_purchase_staff`、`student01_warehouse_staff`，用于进入该学员自己的 ERP 工作区执行业务。
+- 学员 ERP 子账号：例如 `student01_admin`、`student01_purchase_staff`、`student01_warehouse_staff`，用于进入该学员自己的 ERP 工作区执行业务。
 
 用户希望体验更像“每个学员配一套 ERP”：学员先登录测试端，再从测试端进入自己的 ERP，并用该学员名下的岗位账号登录。这样不会让学员一开始面对一堆账号，也能保持不同 stu 的 ERP 数据互相隔离。
 
@@ -17,7 +17,7 @@
 2. 学员在测试竞赛端点击“进入我的 ERP 工作区”。
 3. 系统显示第二个登录界面，要求选择岗位并输入密码，不要求手写完整子账号。
 4. 二次登录成功后进入 ERP 工作区。
-5. ERP 工作区只允许访问该学员自己的采购、库存、销售、结算业务数据。
+5. ERP 工作区只允许访问该学员自己的基础资料、采购、库存、销售、结算业务数据。
 
 ## 非目标
 
@@ -58,6 +58,7 @@
 1. 读取第一次登录的学员主账号信息，例如当前用户是 `student01`。
 2. 用户选择岗位并输入密码。
 3. 前端根据当前学员账号自动拼出 ERP 子账号：
+   - 管理员：`${studentUsername}_admin`
    - 采购专员：`${studentUsername}_purchase_staff`
    - 仓库专员：`${studentUsername}_warehouse_staff`
    - 销售专员：`${studentUsername}_sales_staff`
@@ -81,9 +82,11 @@ ERP 子账号进入系统后，第一阶段只保留“退出登录”。
 
 后端现有数据隔离继续生效：
 
+- `student01_admin` 的 `workspaceOwnerId` 是 `student01`。
 - `student01_purchase_staff` 的 `workspaceOwnerId` 是 `student01`。
 - `student02_purchase_staff` 的 `workspaceOwnerId` 是 `student02`。
 - 不同学员的基础资料、单据、库存、结算、消息互相不可见。
+- 学员 ERP 管理员只管理该学员自己的 ERP 工作区，不获得平台缺陷发布、学员管理、评分等后台权限。
 
 二次登录页的前端校验是体验和防误用；真正的数据隔离仍以后端 `workspaceOwnerId` 为准。
 
@@ -102,11 +105,12 @@ ERP 子账号进入系统后，第一阶段只保留“退出登录”。
 - 标题：`我的 ERP 工作区`
 - 说明：`请选择岗位并输入密码，系统会自动匹配当前学员的 ERP 子账号。`
 - 岗位选项：
+  - `管理员`
   - `采购专员`
   - `仓库专员`
   - `销售专员`
   - `结算主管`
-- 页面可显示当前将登录的账号预览，例如 `student01_purchase_staff`，但不能要求用户手写前缀。
+- 页面可显示当前将登录的账号预览，例如 `student01_admin` 或 `student01_purchase_staff`，但不能要求用户手写前缀。
 
 ### 测试要求
 
@@ -134,6 +138,7 @@ ERP 子账号进入系统后，第一阶段只保留“退出登录”。
 
 - `student01` 登录后能看到“进入我的 ERP 工作区”。
 - 点击后进入 `/student-erp-login`。
+- 在二次登录页选择“管理员”并输入正确密码后，系统使用 `student01_admin` 进入该学员 ERP 工作区。
 - 在二次登录页选择“采购专员”并输入正确密码后，系统使用 `student01_purchase_staff` 进入 ERP 工作区。
 - 二次登录页不要求用户手写 `student01` 前缀或完整子账号。
 - 二次登录页不会允许当前学员进入其他学员的 ERP 子账号。

@@ -235,19 +235,39 @@ class TrainingCompetitionIntegrationTest {
         assertThat(created.erpAccounts)
             .extracting(account -> account.username)
             .containsExactlyInAnyOrder(
+                "student_auto_admin",
                 "student_auto_purchase_staff",
                 "student_auto_warehouse_staff",
                 "student_auto_sales_staff",
                 "student_auto_settlement_manager"
             );
+        assertThat(store.userByUsername("student_auto_admin").role).isEqualTo(RoleCode.ADMIN);
         assertThat(store.userByUsername("student_auto_purchase_staff").role).isEqualTo(RoleCode.PURCHASE_STAFF);
         assertThat(store.userByUsername("student_auto_warehouse_staff").role).isEqualTo(RoleCode.WAREHOUSE_STAFF);
         assertThat(store.userByUsername("student_auto_sales_staff").role).isEqualTo(RoleCode.SALES_STAFF);
         assertThat(store.userByUsername("student_auto_settlement_manager").role).isEqualTo(RoleCode.SETTLEMENT_MANAGER);
+        assertThat(store.userByUsername("student_auto_admin").workspaceOwnerId).isEqualTo(created.id);
         assertThat(store.userByUsername("student_auto_purchase_staff").workspaceOwnerId).isEqualTo(created.id);
         assertThat(store.userByUsername("student_auto_warehouse_staff").workspaceOwnerId).isEqualTo(created.id);
         assertThat(store.userByUsername("student_auto_sales_staff").workspaceOwnerId).isEqualTo(created.id);
         assertThat(store.userByUsername("student_auto_settlement_manager").workspaceOwnerId).isEqualTo(created.id);
+    }
+
+    @Test
+    void studentWorkspaceAdminUsesOwnedErpMenusWithoutPlatformCompetitionPermissions() {
+        var platformAdmin = store.userByUsername("admin");
+        var workspaceAdmin = store.userByUsername("student01_admin");
+
+        assertThat(store.menus(platformAdmin))
+            .extracting(menu -> menu.title)
+            .contains("基础信息管理", "采购管理", "库存管理", "销售管理", "结算管理", "测试竞赛管理");
+        assertThat(store.menus(workspaceAdmin))
+            .extracting(menu -> menu.title)
+            .containsExactly("基础信息管理", "采购管理", "库存管理", "销售管理", "结算管理");
+        assertThatThrownBy(() -> store.bugDefinitions(workspaceAdmin.id))
+            .isInstanceOf(BusinessException.class)
+            .hasMessageContaining("当前角色无缺陷发布权限");
+        assertThat(store.bugDefinitions(platformAdmin.id)).isNotEmpty();
     }
 
     @Test

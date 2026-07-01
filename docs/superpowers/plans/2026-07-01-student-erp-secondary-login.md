@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add a post-login student ERP workspace login where a student selects a role and enters a password instead of typing a full `student01_*` account.
+**Goal:** Add a post-login student ERP workspace login where a student selects a role, including ERP workspace administrator, and enters a password instead of typing a full `student01_*` account.
 
 **Architecture:** Keep the first login on `/login`. Add `/student-erp-login` as a protected route that is only available to a logged-in `STUDENT` main account. The secondary page calls `/auth/login` directly with an auto-composed username, validates the returned username belongs to the current student, then commits the ERP subaccount session to the auth store.
 
@@ -23,7 +23,7 @@
 - Create `frontend/src/views/StudentErpLoginView.vue`
   - Render the secondary login page.
   - Show current student workspace name.
-  - Let the user select one of four roles and enter only the password.
+  - Let the user select one of five roles and enter only the password.
   - Compose `studentUsername + '_' + suffix` internally.
   - Commit the session only after ownership validation passes.
 - Modify `frontend/src/views/CompetitionView.vue`
@@ -32,10 +32,189 @@
   - Add static coverage for route, page text, role suffix mapping, auto username composition, and competition entry button.
 - Modify `README.md`, `README.en.md`, `docs/operation-manual.md`
   - Document the first login and secondary ERP workspace login flow.
+- Modify `backend/src/main/java/com/erp/store/ErpStore.java`
+  - Generate `student01_admin` style workspace administrator accounts.
+  - Return ERP-only menus for workspace administrators.
+  - Keep platform defect publishing and student management restricted to platform `admin` and `superadmin`.
+- Modify `backend/src/main/java/com/erp/web/AuthController.java`
+  - Return user-aware menus so platform `admin` and workspace `student01_admin` do not share the same menu set.
+- Modify `backend/src/test/java/com/erp/TrainingCompetitionIntegrationTest.java`
+  - Add backend coverage for workspace administrator generation and permissions.
 
 ---
 
-### Task 1: Add tests for secondary ERP login flow
+### Task 1: Add backend tests for student ERP workspace administrator
+
+**Files:**
+- Modify: `backend/src/test/java/com/erp/TrainingCompetitionIntegrationTest.java`
+
+- [ ] **Step 1: Write failing backend tests**
+
+In `creatingStudentAutomaticallyCreatesRoleSpecificErpAccounts`, add `student_auto_admin` to the expected usernames and assert its role/workspace:
+
+```java
+assertThat(created.erpAccounts)
+    .extracting(account -> account.username)
+    .containsExactlyInAnyOrder(
+        "student_auto_admin",
+        "student_auto_purchase_staff",
+        "student_auto_warehouse_staff",
+        "student_auto_sales_staff",
+        "student_auto_settlement_manager"
+    );
+assertThat(store.userByUsername("student_auto_admin").role).isEqualTo(RoleCode.ADMIN);
+assertThat(store.userByUsername("student_auto_admin").workspaceOwnerId).isEqualTo(created.id);
+```
+
+Add this test:
+
+```java
+@Test
+void studentWorkspaceAdminUsesOwnedErpMenusWithoutPlatformCompetitionPermissions() {
+    var platformAdmin = store.userByUsername("admin");
+    var workspaceAdmin = store.userByUsername("student01_admin");
+
+    assertThat(store.menus(platformAdmin))
+        .extracting(menu -> menu.title)
+        .contains("基础信息管理", "采购管理", "库存管理", "销售管理", "结算管理", "测试竞赛管理");
+    assertThat(store.menus(workspaceAdmin))
+        .extracting(menu -> menu.title)
+        .containsExactly("基础信息管理", "采购管理", "库存管理", "销售管理", "结算管理");
+    assertThatThrownBy(() -> store.bugDefinitions(workspaceAdmin.id))
+        .isInstanceOf(BusinessException.class)
+        .hasMessageContaining("当前角色无缺陷发布权限");
+    assertThat(store.bugDefinitions(platformAdmin.id)).isNotEmpty();
+}
+```
+
+- [ ] **Step 2: Run backend test to verify it fails**
+
+Run:
+
+```powershell
+cd backend
+.\mvnw.cmd "-Dtest=TrainingCompetitionIntegrationTest#creatingStudentAutomaticallyCreatesRoleSpecificErpAccounts,TrainingCompetitionIntegrationTest#studentWorkspaceAdminUsesOwnedErpMenusWithoutPlatformCompetitionPermissions" test
+```
+
+Expected: FAIL because `student_auto_admin` and `student01_admin` do not exist yet, and `store.menus(User)` may not exist yet.
+
+---
+
+### Task 2: Implement student ERP workspace administrator
+
+**Files:**
+- Modify: `backend/src/main/java/com/erp/store/ErpStore.java`
+- Modify: `backend/src/main/java/com/erp/web/AuthController.java`
+
+- [ ] **Step 1: Generate admin subaccount**
+
+In `createStudentWorkspace`, add:
+
+```java
+createStudentErpAccount(student, "_admin", "管理员", RoleCode.ADMIN, password);
+```
+
+before creating the other role-specific accounts.
+
+- [ ] **Step 2: Make menus user-aware**
+
+Add this overload to `ErpStore`:
+
+```java
+public List<MenuNode> menus(User user) {
+    return menus(user.role, user.workspaceOwnerId);
+}
+```
+
+Change the existing `menus(RoleCode role)` to delegate:
+
+```java
+public List<MenuNode> menus(RoleCode role) {
+    return menus(role, null);
+}
+```
+
+Add private implementation:
+
+```java
+private List<MenuNode> menus(RoleCode role, Long workspaceOwnerId) {
+    var menus = new ArrayList<MenuNode>();
+    if (role == RoleCode.ADMIN) {
+        menus.add(baseInfoMenu());
+        menus.add(purchaseMenu());
+        menus.add(inventoryMenu());
+        menus.add(salesMenu());
+        menus.add(settlementMenu());
+        if (workspaceOwnerId == null) {
+            menus.add(competitionAdminMenu());
+        }
+    }
+    if (role == RoleCode.SUPER_ADMIN) {
+        menus.add(competitionSuperAdminMenu());
+    }
+    if (role == RoleCode.PURCHASE_MANAGER || role == RoleCode.PURCHASE_STAFF) {
+        menus.add(purchaseMenu());
+    }
+    if (role == RoleCode.WAREHOUSE_MANAGER || role == RoleCode.WAREHOUSE_STAFF) {
+        menus.add(inventoryMenu());
+    }
+    if (role == RoleCode.SALES_MANAGER || role == RoleCode.SALES_STAFF) {
+        menus.add(salesMenu());
+    }
+    if (role == RoleCode.SETTLEMENT_MANAGER) {
+        menus.add(settlementMenu());
+    }
+    if (role == RoleCode.STUDENT) {
+        menus.add(competitionStudentMenu());
+    }
+    return menus;
+}
+```
+
+- [ ] **Step 3: Restrict platform admin operations to platform admin**
+
+Change `requireAdmin(User user)` to:
+
+```java
+private void requireAdmin(User user) {
+    if (user.role == RoleCode.SUPER_ADMIN) {
+        return;
+    }
+    if (user.role == RoleCode.ADMIN && user.workspaceOwnerId == null) {
+        return;
+    }
+    throw new BusinessException("当前角色无缺陷发布权限。");
+}
+```
+
+- [ ] **Step 4: Return user-aware menus from auth API**
+
+In `AuthController.login()` and `AuthController.me()`, replace:
+
+```java
+"menus", store.menus(user.role)
+```
+
+with:
+
+```java
+"menus", store.menus(user)
+```
+
+- [ ] **Step 5: Run backend tests to verify green**
+
+Run:
+
+```powershell
+cd backend
+.\mvnw.cmd "-Dtest=TrainingCompetitionIntegrationTest#creatingStudentAutomaticallyCreatesRoleSpecificErpAccounts,TrainingCompetitionIntegrationTest#studentWorkspaceAdminUsesOwnedErpMenusWithoutPlatformCompetitionPermissions" test
+```
+
+Expected: PASS.
+
+---
+
+### Task 3: Add tests for secondary ERP login flow
 
 **Files:**
 - Modify: `frontend/src/tests/chinese-ui.spec.ts`
@@ -63,10 +242,12 @@ it('学员 ERP 工作区二次登录通过岗位自动匹配子账号', () => {
   expect(loginView).toContain("router.push('/competition/reports')")
   expect(studentErpLoginView).toContain('我的 ERP 工作区')
   expect(studentErpLoginView).toContain('请选择岗位并输入密码')
+  expect(studentErpLoginView).toContain('管理员')
   expect(studentErpLoginView).toContain('采购专员')
   expect(studentErpLoginView).toContain('仓库专员')
   expect(studentErpLoginView).toContain('销售专员')
   expect(studentErpLoginView).toContain('结算主管')
+  expect(studentErpLoginView).toContain("suffix: 'admin'")
   expect(studentErpLoginView).toContain("suffix: 'purchase_staff'")
   expect(studentErpLoginView).toContain("suffix: 'warehouse_staff'")
   expect(studentErpLoginView).toContain("suffix: 'sales_staff'")
@@ -91,7 +272,7 @@ Expected: FAIL because `StudentErpLoginView.vue` and `/student-erp-login` do not
 
 ---
 
-### Task 2: Make auth store support validated secondary login
+### Task 4: Make auth store support validated secondary login
 
 **Files:**
 - Modify: `frontend/src/stores/auth.ts`
@@ -146,7 +327,7 @@ No standalone test is needed for this file because it is covered by the final `n
 
 ---
 
-### Task 3: Route students to the testing side after first login
+### Task 5: Route students to the testing side after first login
 
 **Files:**
 - Modify: `frontend/src/views/LoginView.vue`
@@ -179,7 +360,7 @@ background:
 
 ---
 
-### Task 4: Add protected `/student-erp-login` route
+### Task 6: Add protected `/student-erp-login` route
 
 **Files:**
 - Modify: `frontend/src/router/index.ts`
@@ -218,7 +399,7 @@ router.beforeEach(async (to) => {
 
 ---
 
-### Task 5: Build secondary student ERP login page
+### Task 7: Build secondary student ERP login page
 
 **Files:**
 - Create: `frontend/src/views/StudentErpLoginView.vue`
@@ -240,11 +421,12 @@ const router = useRouter()
 const auth = useAuthStore()
 const loading = ref(false)
 const form = reactive({
-  roleSuffix: 'purchase_staff',
+  roleSuffix: 'admin',
   password: '123456'
 })
 
 const roleOptions = [
+  { label: '管理员', suffix: 'admin', description: '基础资料和ERP全模块' },
   { label: '采购专员', suffix: 'purchase_staff', description: '采购入库、采购退货' },
   { label: '仓库专员', suffix: 'warehouse_staff', description: '入库审核、出库审核、库存调拨' },
   { label: '销售专员', suffix: 'sales_staff', description: '销售出库、销售退货' },
@@ -531,7 +713,7 @@ auth.applySession(data)
 
 ---
 
-### Task 6: Add entry button in testing competition page
+### Task 8: Add entry button in testing competition page
 
 **Files:**
 - Modify: `frontend/src/views/CompetitionView.vue`
@@ -581,7 +763,7 @@ In the `.header-actions` block, before the submit report button, add:
 
 ---
 
-### Task 7: Update docs for selected-role secondary login
+### Task 9: Update docs for selected-role secondary login
 
 **Files:**
 - Modify: `README.md`
@@ -593,7 +775,7 @@ In the `.header-actions` block, before the submit report button, add:
 In the testing competition description, make the flow explicit:
 
 ```md
-学员先使用主账号（如 `student01`）登录测试竞赛端，点击“进入我的 ERP 工作区”后选择采购、仓库、销售或结算岗位并输入密码；系统会自动匹配 `student01_*` 子账号进入该学员自己的 ERP 工作区。学员不需要手写 `student01` 前缀。
+学员先使用主账号（如 `student01`）登录测试竞赛端，点击“进入我的 ERP 工作区”后选择管理员、采购、仓库、销售或结算岗位并输入密码；系统会自动匹配 `student01_*` 子账号进入该学员自己的 ERP 工作区。学员不需要手写 `student01` 前缀。
 ```
 
 Update the demo account note to say:
@@ -618,6 +800,7 @@ Replace the old instruction that directly logs into `student01_purchase_staff` w
 1. 登录 `student01 / 123456`，进入“我的缺陷报告”或“我的提交文件”页面。
 2. 点击“进入我的 ERP 工作区”。
 3. 在二次登录页选择岗位：
+   - 管理员：系统自动使用 `student01_admin`
    - 采购专员：系统自动使用 `student01_purchase_staff`
    - 仓库专员：系统自动使用 `student01_warehouse_staff`
    - 销售专员：系统自动使用 `student01_sales_staff`
@@ -629,7 +812,7 @@ Replace the old instruction that directly logs into `student01_purchase_staff` w
 
 ---
 
-### Task 8: Verify and commit
+### Task 10: Verify and commit
 
 **Files:**
 - All files modified above.

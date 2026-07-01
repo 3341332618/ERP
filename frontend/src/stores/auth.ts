@@ -1,5 +1,7 @@
 import { defineStore } from 'pinia'
-import { currentUser, login, type CurrentUser, type MenuNode } from '../api'
+import { currentUser, login as loginApi, type CurrentUser, type MenuNode } from '../api'
+
+type LoginSession = Awaited<ReturnType<typeof loginApi>>
 
 export const useAuthStore = defineStore('auth', {
   state: () => ({
@@ -8,12 +10,16 @@ export const useAuthStore = defineStore('auth', {
     menus: [] as MenuNode[]
   }),
   actions: {
-    async login(username: string, password: string) {
-      const data = await login({ username, password })
+    applySession(data: LoginSession) {
       this.token = data.token
       this.user = data.user
       this.menus = data.menus
       localStorage.setItem('ERP_TOKEN', data.token)
+    },
+    async login(username: string, password: string) {
+      const data = await loginApi({ username, password })
+      this.applySession(data)
+      return data
     },
     async loadCurrentUser() {
       if (!this.token) return
@@ -29,4 +35,3 @@ export const useAuthStore = defineStore('auth', {
     }
   }
 })
-

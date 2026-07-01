@@ -126,6 +126,7 @@ public class ErpStore {
     private User createStudentWorkspace(String username, String name, String phone, String password) {
         var student = createUser(username, name, phone, RoleCode.STUDENT, null, password);
         student.workspaceOwnerId = student.id;
+        createStudentErpAccount(student, "_admin", "管理员", RoleCode.ADMIN, password);
         createStudentErpAccount(student, "_purchase_staff", "采购专员", RoleCode.PURCHASE_STAFF, password);
         var warehouseStaff = createStudentErpAccount(student, "_warehouse_staff", "仓库专员", RoleCode.WAREHOUSE_STAFF, password);
         createStudentErpAccount(student, "_sales_staff", "销售专员", RoleCode.SALES_STAFF, password);
@@ -165,6 +166,14 @@ public class ErpStore {
     }
 
     public List<MenuNode> menus(RoleCode role) {
+        return menus(role, null);
+    }
+
+    public List<MenuNode> menus(User user) {
+        return menus(user.role, user.workspaceOwnerId);
+    }
+
+    private List<MenuNode> menus(RoleCode role, Long workspaceOwnerId) {
         var menus = new ArrayList<MenuNode>();
         if (role == RoleCode.ADMIN) {
             menus.add(baseInfoMenu());
@@ -172,7 +181,9 @@ public class ErpStore {
             menus.add(inventoryMenu());
             menus.add(salesMenu());
             menus.add(settlementMenu());
-            menus.add(competitionAdminMenu());
+            if (workspaceOwnerId == null) {
+                menus.add(competitionAdminMenu());
+            }
         }
         if (role == RoleCode.SUPER_ADMIN) {
             menus.add(competitionSuperAdminMenu());
@@ -1650,9 +1661,13 @@ public class ErpStore {
     }
 
     private void requireAdmin(User user) {
-        if (user.role != RoleCode.ADMIN && user.role != RoleCode.SUPER_ADMIN) {
-            throw new BusinessException("当前角色无缺陷发布权限。");
+        if (user.role == RoleCode.SUPER_ADMIN) {
+            return;
         }
+        if (user.role == RoleCode.ADMIN && user.workspaceOwnerId == null) {
+            return;
+        }
+        throw new BusinessException("当前角色无缺陷发布权限。");
     }
 
     private void requireSuperAdmin(User user) {

@@ -41,7 +41,11 @@ async function submit() {
   try {
     await auth.login(form.username.trim(), form.password)
     ElMessage.success('登录成功')
-    router.push('/home')
+    if (auth.user?.role === 'STUDENT') {
+      router.push('/competition/reports')
+    } else {
+      router.push('/home')
+    }
   } finally {
     loading.value = false
   }

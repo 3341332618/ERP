@@ -3,6 +3,7 @@ import { useAuthStore } from '../stores/auth'
 
 const routes: RouteRecordRaw[] = [
   { path: '/login', name: '登录', component: () => import('../views/LoginView.vue') },
+  { path: '/student-erp-login', name: '学员ERP工作区登录', component: () => import('../views/StudentErpLoginView.vue') },
   {
     path: '/',
     component: () => import('../layouts/AppLayout.vue'),
@@ -38,6 +39,9 @@ router.beforeEach(async (to) => {
       auth.logout()
       return '/login'
     }
+  }
+  if (to.path === '/student-erp-login' && auth.user?.role !== 'STUDENT') {
+    return '/home'
   }
   return true
 })

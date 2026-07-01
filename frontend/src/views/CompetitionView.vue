@@ -16,6 +16,9 @@
             <el-icon><Plus /></el-icon>
             新增学员
           </el-button>
+          <el-button v-if="isStudentMainAccount" type="success" @click="enterStudentErpWorkspace">
+            进入我的 ERP 工作区
+          </el-button>
           <el-button v-if="isStudentReportPage" type="primary" @click="openSubmit()">
             <el-icon><EditPen /></el-icon>
             提交缺陷报告
@@ -76,7 +79,7 @@
         <div class="toolbar">
           <el-input v-model="query.keyword" placeholder="请输入学员账号/姓名查询" clearable style="width: 260px" />
         </div>
-        <div class="dialog-tip">新增学员后会自动生成采购专员、仓库专员、销售专员、结算主管 4 个 ERP子账号，不同学员的数据互相隔离。</div>
+        <div class="dialog-tip">新增学员后会自动生成管理员、采购专员、仓库专员、销售专员、结算主管 5 个 ERP子账号，不同学员的数据互相隔离。</div>
         <el-table :data="filteredStudents" border empty-text="暂无学员数据">
           <el-table-column type="index" label="序号" width="70" />
           <el-table-column prop="username" label="学员账号" min-width="150" />
@@ -314,7 +317,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { EditPen, Plus, Refresh, UploadFilled } from '@element-plus/icons-vue'
 import {
@@ -339,8 +342,11 @@ import {
   type StudentAccount,
   type StudentOperationLog
 } from '../api'
+import { useAuthStore } from '../stores/auth'
 
 const route = useRoute()
+const router = useRouter()
+const auth = useAuthStore()
 const bugs = ref<BugDefinition[]>([])
 const reports = ref<BugReport[]>([])
 const files = ref<CompetitionFileSubmission[]>([])
@@ -405,6 +411,7 @@ const isFilePage = computed(() => isFileReviewPage.value || isStudentFilePage.va
 const isLogPage = computed(() => viewType.value === 'logs')
 const isHistoryPage = computed(() => viewType.value === 'history')
 const isRankingPage = computed(() => viewType.value === 'rankings')
+const isStudentMainAccount = computed(() => auth.user?.role === 'STUDENT')
 const pageTitle = computed(() => ({
   bugs: '缺陷库发布',
   students: '学员管理',
@@ -465,6 +472,10 @@ function statusLabel(status: string) {
 
 function statusType(status: string) {
   return ({ PENDING: 'warning', APPROVED: 'success', REJECTED: 'danger' } as Record<string, string>)[status] || 'info'
+}
+
+function enterStudentErpWorkspace() {
+  router.push('/student-erp-login')
 }
 
 function formatFileSize(size: number) {
