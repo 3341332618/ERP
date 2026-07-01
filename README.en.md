@@ -4,9 +4,9 @@ Language: [中文](./README.md) | English
 
 A full-stack ERP demo system built with Spring Boot 3 and Vue 3. It covers purchasing, sales, inventory, settlement, and a software-testing training module where administrators can publish controlled defects while students discover issues independently.
 
-This project is suitable for coursework, training labs, ERP process demos, and full-stack development practice. MySQL infrastructure is already connected through Docker Compose, Flyway migrations, Spring Data JPA configuration, and MySQL Connector/J.
+This project is suitable for coursework, training labs, ERP process demos, and full-stack development practice. The repository includes Docker Compose + MySQL 8.4 + Flyway schema scripts for local startup, schema verification, and deployment demos.
 
-> Current status: database schema, startup configuration, and migration tests are available. Business logic is still being migrated from the in-memory `ErpStore` to database repositories, so this version should not be described as fully persistent for every business operation yet.
+> Note: this is a teaching and demo-oriented ERP project focused on business workflow, role permissions, controlled defect publishing, and independent student testing.
 
 ## Screenshots
 
@@ -82,6 +82,7 @@ Database:
 - MySQL 8.4
 - Local default: `127.0.0.1:3307/erp`
 - Schema migration: `backend/src/main/resources/db/migration/V1__create_schema.sql`
+- Demo data is initialized by the backend service for repeatable coursework, defect toggles, and testing scenarios.
 
 ## Quick Start
 
@@ -224,7 +225,6 @@ Frontend deployment:
 
 ## Current Limitations
 
-- Business persistence is still being migrated from `ErpStore` to repository-backed storage.
 - Uploaded competition files are stored under the backend runtime directory: `uploads/competition/<username>/`.
 - Production deployment should replace the default JWT secret and configure persistent file storage, backup, and monitoring.
 

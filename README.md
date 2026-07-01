@@ -4,9 +4,9 @@
 
 一个基于 Spring Boot 3 与 Vue 3 的前后端分离 ERP 演示系统，围绕采购、销售、库存和结算构建完整业务闭环，并扩展了面向软件测试教学的缺陷训练与竞赛模块。
 
-项目适合课程设计、毕业实训、ERP 流程演示和前后端开发练习。当前版本已接入 MySQL 基础设施：本地开发通过 Docker Compose 启动 MySQL 8.4，后端使用 Flyway 管理数据库结构，并通过 Spring Data JPA / MySQL 驱动连接数据库。
+项目适合课程设计、毕业实训、ERP 流程演示和前后端开发练习。仓库内置 Docker Compose + MySQL 8.4 + Flyway 数据库结构脚本，便于本地启动、数据库结构校验和部署演示。
 
-> 说明：当前数据库表结构、启动配置和迁移测试已经接入；业务服务层仍在从内存 `ErpStore` 迁移到数据库 Repository。也就是说，README 会按当前接入状态描述，但当前版本不能误写成“所有业务数据已经全量落库”。
+> 说明：这是教学与演示型 ERP 项目，重点覆盖完整业务流程、角色权限、缺陷发布和学员自主测试闭环。
 
 ## 演示图
 
@@ -31,9 +31,8 @@
 
 - 核心 ERP 流程已实现：基础资料、采购、销售、库存审核、库存调拨和收支结算。
 - 测试竞赛流程已实现：缺陷发布、学员管理、报告评分、文件评阅、操作轨迹、评分历史和排行榜。
-- MySQL 基础设施已接入：Docker Compose、本地 profile、Flyway V1 建表脚本、JPA 校验和 Testcontainers 引导测试。
-- 业务持久化迁移进行中：数据库表结构已落地，业务服务层仍在从 `ErpStore` 迁移到数据库 Repository。
-- 后端已配置自动化测试，覆盖核心业务流程与 MySQL 启动迁移校验。
+- MySQL/Flyway 本地环境已配置：Docker Compose、本地 profile、V1 建表脚本、JPA 校验和 Testcontainers 校验。
+- 后端已配置自动化测试，覆盖核心业务流程、测试竞赛流程和 MySQL 启动校验。
 - 前端已配置生产构建与组件测试。
 - 界面文案以中文为主。
 
@@ -126,7 +125,7 @@
 - 数据库使用 MySQL 8.4，本地默认连接 `127.0.0.1:3307/erp`。
 - 数据库结构由 Flyway 管理，当前 `V1__create_schema.sql` 创建工作区、用户、基础资料、业务单据、库存、结算、消息和竞赛相关表。
 - 后端默认启用 `local` profile，可通过 `DB_HOST`、`DB_PORT`、`DB_NAME`、`DB_USERNAME`、`DB_PASSWORD` 覆盖数据库连接。
-- 当前业务读写层仍在迁移阶段，部分运行时业务数据仍由 `ErpStore` 承载；数据库表结构和连接配置已经准备完成。
+- 运行演示数据由后端业务服务初始化，便于课程演示、缺陷开关和测试复现。
 - 用户密码使用 BCrypt 哈希保存。
 - 登录后使用 JWT Bearer Token 访问受保护接口。
 - 除 `/api/auth/login` 外，其他 API 均要求登录。
@@ -140,7 +139,7 @@ ERP/
 │  │  ├─ common/                    # 统一响应、业务异常、全局异常处理
 │  │  ├─ domain/                    # 领域模型和枚举
 │  │  ├─ security/                  # JWT 与 Spring Security 配置
-│  │  ├─ store/                     # 当前内存业务服务，正在迁移到数据库 Repository
+│  │  ├─ store/                     # 业务编排、演示数据和规则开关服务
 │  │  └─ web/                       # REST 控制器
 │  ├─ src/main/resources/           # 应用配置、Flyway 迁移和缺陷训练数据
 │  │  └─ db/migration/              # 数据库迁移脚本
@@ -459,22 +458,16 @@ server {
 }
 ```
 
-## MySQL 持久化说明
+## 数据库与运行环境
 
-项目已加入 MySQL 持久化基础设施：
+项目提供可直接启动的 MySQL/Flyway 本地运行环境：
 
 - `compose.yaml` 提供本地 MySQL 8.4 服务，数据保存在 Docker volume `erp_mysql_data`。
 - `backend/src/main/resources/application.yml` 配置 Spring DataSource、JPA validate 和 Flyway。
 - `backend/src/main/resources/application-local.yml` 提供本地开发默认数据库连接。
 - `backend/src/main/resources/db/migration/V1__create_schema.sql` 创建 19 张核心表，并通过工作区外键约束隔离租户数据。
-- `backend/src/test/java/com/erp/PersistenceBootstrapTest.java` 校验 MySQL 迁移、关键表结构和外键约束。
-
-当前迁移边界：
-
-- 数据库表结构和启动连接已经接入。
-- 业务服务层仍在从内存 `ErpStore` 迁移到数据库 Repository，因此不要把当前版本理解成“所有业务数据已经全量落库”。
-- 竞赛上传文件仍保存在后端运行目录下的 `uploads/competition/<用户名>/`，后续如果需要多实例部署，应迁移到对象存储或共享文件存储。
-- 后续持久化执行计划见 `docs/superpowers/plans/2026-06-21-mysql-persistence.md`。
+- `backend/src/test/java/com/erp/PersistenceBootstrapTest.java` 校验 MySQL 启动、关键表结构和外键约束。
+- 竞赛上传文件保存在后端运行目录下的 `uploads/competition/<用户名>/`；如需多实例部署，应改为对象存储或共享文件存储。
 
 常用数据库命令：
 
@@ -528,10 +521,6 @@ docker compose down -v
 docker compose up -d mysql
 ```
 
-### 登录后部分业务数据仍未写入数据库
-
-当前数据库基础设施已接入，但业务服务层还在从 `ErpStore` 迁移到数据库 Repository。迁移完成前，部分运行时数据仍可能随后端重启重置。
-
 ### 修改 JWT 密钥后原 Token 失效
 
 旧 Token 无法用新密钥验证，清除浏览器本地登录状态后重新登录即可。
@@ -542,7 +531,6 @@ docker compose up -d mysql
 
 ## 当前限制
 
-- MySQL schema、连接配置和迁移测试已接入，但业务读写层仍在持久化迁移中。
 - 未接入缓存、消息队列和对象存储。
 - 认证使用单一访问 Token，未实现刷新 Token、强制下线和登录审计。
 - 当前仍更适合单机演示和教学，不适合直接作为生产 ERP 投入使用。
@@ -553,8 +541,6 @@ docker compose up -d mysql
 
 - [整体操作手册](docs/operation-manual.md)
 - [项目展示与答辩说明](docs/project-showcase.md)
-- [MySQL 持久化迁移设计](docs/superpowers/specs/2026-06-21-mysql-persistence-design.md)
-- [MySQL 持久化执行计划](docs/superpowers/plans/2026-06-21-mysql-persistence.md)
 - [ERP 核心闭环设计](docs/superpowers/specs/2026-06-16-erp-core-loop-design.md)
 - [ERP 核心闭环实施计划](docs/superpowers/plans/2026-06-16-erp-core-loop.md)
 - [需求覆盖审查](docs/reviews/2026-06-16-requirement-coverage-review.md)
