@@ -116,8 +116,8 @@ async function submit() {
 }
 
 .login-page {
-  --login-panel-bg: rgba(232, 247, 255, 0.86);
-  --login-panel-border: rgba(132, 190, 238, 0.62);
+  --login-panel-bg: rgba(231, 246, 255, 0.96);
+  --login-panel-border: rgba(88, 160, 218, 0.72);
   --login-primary: #2c78b8;
   --login-primary-dark: #15598e;
   --login-text: #123c5c;
@@ -132,7 +132,7 @@ async function submit() {
   overflow: hidden;
   color: var(--login-text);
   background:
-    linear-gradient(90deg, rgba(232, 245, 255, 0.02), rgba(241, 250, 255, 0.18) 52%, rgba(244, 251, 255, 0.42)),
+    linear-gradient(90deg, rgba(232, 245, 255, 0.02), rgba(241, 250, 255, 0.1) 52%, rgba(244, 251, 255, 0.22)),
     url("/images/login-current-bg.png") center / cover no-repeat,
     #e8f7ff;
 }
@@ -142,7 +142,7 @@ async function submit() {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background: radial-gradient(circle at 82% 52%, rgba(255, 255, 255, 0.46), transparent 34%);
+  background: radial-gradient(circle at 80% 52%, rgba(255, 255, 255, 0.2), transparent 30%);
 }
 
 .login-page::after {
@@ -172,7 +172,8 @@ async function submit() {
     linear-gradient(145deg, rgba(255, 255, 255, 0.78), rgba(199, 229, 250, 0.28)),
     var(--login-panel-bg);
   box-shadow:
-    0 28px 70px rgba(44, 120, 184, 0.24),
+    0 28px 70px rgba(44, 120, 184, 0.32),
+    0 8px 24px rgba(13, 71, 116, 0.1),
     inset 0 1px 0 rgba(255, 255, 255, 0.76);
   backdrop-filter: blur(18px);
   animation: login-card-in 0.58s ease both;

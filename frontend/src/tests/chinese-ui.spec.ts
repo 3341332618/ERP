@@ -83,7 +83,7 @@ describe('中文界面文案', () => {
     const loginView = readFileSync(join(process.cwd(), 'src/views/LoginView.vue'), 'utf8')
 
     expect(loginView).toContain('url("/images/login-current-bg.png")')
-    expect(loginView).toContain('--login-panel-bg: rgba(232, 247, 255, 0.86);')
+    expect(loginView).toContain('--login-panel-bg: rgba(231, 246, 255, 0.96);')
     expect(statSync(join(process.cwd(), 'public/images/login-current-bg.png')).isFile()).toBe(true)
   })
 

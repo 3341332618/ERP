@@ -1,10 +1,31 @@
 # ERP 管理平台
 
+语言：中文 | [English](./README.en.md)
+
 一个基于 Spring Boot 3 与 Vue 3 的前后端分离 ERP 演示系统，围绕采购、销售、库存和结算构建完整业务闭环，并扩展了面向软件测试教学的缺陷训练与竞赛模块。
 
 项目适合课程设计、毕业实训、ERP 流程演示和前后端开发练习。当前版本已接入 MySQL 基础设施：本地开发通过 Docker Compose 启动 MySQL 8.4，后端使用 Flyway 管理数据库结构，并通过 Spring Data JPA / MySQL 驱动连接数据库。
 
 > 说明：当前数据库表结构、启动配置和迁移测试已经接入；业务服务层仍在从内存 `ErpStore` 迁移到数据库 Repository。也就是说，README 会按当前接入状态描述，但当前版本不能误写成“所有业务数据已经全量落库”。
+
+## 演示图
+
+| 登录页 | 首页看板 |
+| --- | --- |
+| [![登录页](./docs/assets/screenshots/login-page.png)](./docs/assets/screenshots/login-page.png) | [![首页看板](./docs/assets/screenshots/home-dashboard.png)](./docs/assets/screenshots/home-dashboard.png) |
+
+## 快速直达
+
+- [快速启动](#快速启动)
+- [演示账号](#演示账号)
+- [测试与构建](#测试与构建)
+- [部署说明](#部署说明)
+- [完整操作手册](./docs/operation-manual.md)
+- [项目展示说明](./docs/project-showcase.md)
+- [测试计划](./docs/testing/super-admin-flow-test-plan.md)
+- [需求与训练资料归档](./docs/requirements/)
+- [数据库迁移脚本](./backend/src/main/resources/db/migration/V1__create_schema.sql)
+- [前端源码](./frontend/src/) / [后端源码](./backend/src/main/java/com/erp/)
 
 ## 项目状态
 
