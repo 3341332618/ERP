@@ -70,6 +70,23 @@ describe('中文界面文案', () => {
     expect(router).toContain("return '/login'")
   })
 
+  it('登录页使用参考登录页的双栏玻璃拟态结构', () => {
+    const loginView = readFileSync(join(process.cwd(), 'src/views/LoginView.vue'), 'utf8')
+
+    expect(loginView).toContain('class="login-copy"')
+    expect(loginView).toContain('class="login-card__header"')
+    expect(loginView).toContain('class="login-field__control"')
+    expect(loginView).toContain('class="login-submit"')
+  })
+
+  it('登录页使用当前背景图和淡蓝色登录框', () => {
+    const loginView = readFileSync(join(process.cwd(), 'src/views/LoginView.vue'), 'utf8')
+
+    expect(loginView).toContain('url("/images/login-current-bg.png")')
+    expect(loginView).toContain('--login-panel-bg: rgba(232, 247, 255, 0.86);')
+    expect(statSync(join(process.cwd(), 'public/images/login-current-bg.png')).isFile()).toBe(true)
+  })
+
   it('库存调拨路由使用库存调拨单配置', () => {
     const router = readFileSync(join(process.cwd(), 'src/router/index.ts'), 'utf8')
     const documentView = readFileSync(join(process.cwd(), 'src/views/DocumentView.vue'), 'utf8')
@@ -147,7 +164,7 @@ describe('中文界面文案', () => {
     expect(competitionView).toContain('删除学员')
     expect(competitionView).toContain('默认密码')
     expect(competitionView).toContain('发布缺陷')
-    expect(competitionView).toContain('缺陷测试任务')
+    expect(competitionView).not.toContain('缺陷测试任务')
     expect(competitionView).toContain('提交缺陷报告')
     expect(competitionView).toContain('学员报告评分')
     expect(competitionView).toContain('提交测试文件')

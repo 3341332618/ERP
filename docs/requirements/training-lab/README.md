@@ -5,7 +5,7 @@
 建议把缺陷清单放在这里，例如：
 
 ```text
-training-lab/bug清单.xlsx
+docs/requirements/training-lab/bug清单.xlsx
 ```
 
 后续“缺陷发布/学员测试竞赛”功能会优先读取或参考这个目录中的资料。
@@ -13,7 +13,7 @@ training-lab/bug清单.xlsx
 当前已读取的清单：
 
 ```text
-training-lab/3. ERP（资源协同）管理平台Bug清单.xlsx
+docs/requirements/training-lab/3. ERP（资源协同）管理平台Bug清单.xlsx
 ```
 
 已抽取到后端资源：

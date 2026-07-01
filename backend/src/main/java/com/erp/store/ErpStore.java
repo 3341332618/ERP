@@ -231,11 +231,10 @@ public class ErpStore {
     }
 
     private MenuNode competitionStudentMenu() {
-        return new MenuNode("测试竞赛", "/competition/tasks")
-            .add(new MenuNode("缺陷测试任务", "/competition/tasks"))
+        return new MenuNode("测试竞赛", "/competition/my-reports")
+            .add(new MenuNode("我的缺陷报告", "/competition/my-reports"))
             .add(new MenuNode("提交测试文件", "/competition/submit-file"))
             .add(new MenuNode("我的提交文件", "/competition/my-files"))
-            .add(new MenuNode("我的缺陷报告", "/competition/my-reports"))
             .add(new MenuNode("竞赛排行榜", "/competition/rankings"));
     }
 
@@ -248,6 +247,11 @@ public class ErpStore {
 
     public List<BugDefinition> bugDefinitions() {
         return new ArrayList<>(bugDefinitions.values());
+    }
+
+    public List<BugDefinition> bugDefinitions(Long operatorId) {
+        requireAdmin(userById(operatorId));
+        return bugDefinitions();
     }
 
     public List<StudentAccount> students(Long operatorId) {
@@ -293,6 +297,10 @@ public class ErpStore {
             bug.publisherId = operator.id;
             bug.publisherName = operator.name;
             bug.publishTime = LocalDateTime.now();
+        } else {
+            bug.publisherId = null;
+            bug.publisherName = "";
+            bug.publishTime = null;
         }
         return bug;
     }
@@ -300,9 +308,7 @@ public class ErpStore {
     public List<BugDefinition> activeBugTasks(Long studentId) {
         var student = userById(studentId);
         requireStudent(student);
-        return bugDefinitions.values().stream()
-            .filter(bug -> bug.active)
-            .toList();
+        return List.of();
     }
 
     public List<BugReport> bugReports(Long userId) {
@@ -316,15 +322,11 @@ public class ErpStore {
     public BugReport submitBugReport(Long studentId, Map<String, String> payload) {
         var student = userById(studentId);
         requireStudent(student);
-        var bug = bugDefinition(payload.get("bugId"));
-        if (!bug.active) {
-            throw new BusinessException("缺陷任务未发布，无法提交报告。");
-        }
         var report = new BugReport();
         report.id = ids.incrementAndGet();
-        report.bugId = bug.id;
-        report.bugSummary = bug.summary;
-        report.moduleName = textOrDefault(payload, "moduleName", bug.moduleName);
+        report.bugId = "";
+        report.bugSummary = "";
+        report.moduleName = requiredPayload(payload, "moduleName", "测试模块必填，请重新输入。");
         report.title = requiredPayload(payload, "title", "缺陷标题必填，请重新输入。");
         report.reproduceSteps = requiredPayload(payload, "reproduceSteps", "复现步骤必填，请重新输入。");
         report.expectedResult = requiredPayload(payload, "expectedResult", "预期结果必填，请重新输入。");
@@ -365,7 +367,7 @@ public class ErpStore {
         submission.id = ids.incrementAndGet();
         submission.title = requiredPayload(payload, "title", "提交标题必填，请重新输入。");
         submission.moduleName = requiredPayload(payload, "moduleName", "测试模块必填，请重新输入。");
-        submission.bugId = textOrDefault(payload, "bugId", "");
+        submission.bugId = "";
         submission.fileName = fileName;
         submission.contentType = textOrDefault(payload, "contentType", "application/octet-stream");
         submission.fileSize = Long.parseLong(textOrDefault(payload, "fileSize", "0"));
@@ -1518,7 +1520,7 @@ public class ErpStore {
     private BugDefinition bugDefinition(String bugId) {
         var bug = bugDefinitions.get(bugId);
         if (bug == null) {
-            throw new BusinessException("缺陷任务不存在。");
+            throw new BusinessException("缺陷不存在。");
         }
         return bug;
     }

@@ -4,8 +4,8 @@
 
 Build a Spring Boot 3 + Vue 3 ERP management system based on the submitted requirement document:
 
-- Source document: `2--A1-需求说明书(新).doc`
-- Extracted text: `2--A1-需求说明书(新).cleaned-requirements.txt`
+- Source document: `docs/requirements/2--A1-需求说明书(新).docx`
+- Extracted text: `docs/requirements/2--A1-需求说明书(新).cleaned-requirements.txt`
 - Approved approach: Scheme B, core business loop.
 
 The first implementation must make the ERP workflow usable end to end:

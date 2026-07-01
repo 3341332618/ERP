@@ -25,6 +25,10 @@ class TrainingCompetitionIntegrationTest {
         var student = store.userByUsername("student01");
 
         assertThat(store.bugDefinitions()).hasSize(79);
+        assertThat(store.bugDefinitions(admin.id)).hasSize(79);
+        assertThatThrownBy(() -> store.bugDefinitions(student.id))
+            .isInstanceOf(BusinessException.class)
+            .hasMessageContaining("权限");
         assertThat(store.bugDefinitions())
             .anySatisfy(bug -> {
                 assertThat(bug.id).isEqualTo("BUG-0004");
@@ -40,12 +44,9 @@ class TrainingCompetitionIntegrationTest {
 
         store.publishBug("BUG-0004", true, admin.id);
 
-        assertThat(store.activeBugTasks(student.id))
-            .extracting(task -> task.id)
-            .containsExactly("BUG-0004");
+        assertThat(store.activeBugTasks(student.id)).isEmpty();
 
         var report = store.submitBugReport(student.id, Map.of(
-            "bugId", "BUG-0004",
             "title", "商品品牌重复校验缺失",
             "moduleName", "商品品牌",
             "actualResult", "重复品牌保存成功",
@@ -56,6 +57,8 @@ class TrainingCompetitionIntegrationTest {
 
         assertThat(report.status).isEqualTo(BugReportStatus.PENDING);
         assertThat(report.studentName).isEqualTo("测试学员一");
+        assertThat(report.bugId).isBlank();
+        assertThat(report.bugSummary).isBlank();
 
         var reviewed = store.reviewBugReport(admin.id, report.id, Map.of(
             "status", "APPROVED",
@@ -75,11 +78,18 @@ class TrainingCompetitionIntegrationTest {
     }
 
     @Test
-    void publishedBugsAreVisibleToStudentsAndCanBeReproducedFromStudentWorkspace() {
+    void publishedBugsStayHiddenFromStudentsButEnableDefectiveBehavior() {
         var admin = store.userByUsername("admin");
         var student = store.userByUsername("student01");
 
         assertThat(store.activeBugTasks(student.id)).isEmpty();
+        var studentMenuPaths = store.menus(RoleCode.STUDENT).stream()
+            .flatMap(menu -> menu.children.stream())
+            .map(menu -> menu.path)
+            .toList();
+        assertThat(studentMenuPaths)
+            .doesNotContain("/competition/tasks")
+            .contains("/competition/my-reports", "/competition/submit-file", "/competition/my-files");
 
         store.createMaster("brand", Map.of("name", "学生端重复品牌"), student.id);
         assertThatThrownBy(() -> store.createMaster("brand", Map.of("name", "学生端重复品牌"), student.id))
@@ -95,9 +105,7 @@ class TrainingCompetitionIntegrationTest {
         store.publishBug("BUG-0002", true, admin.id);
         store.publishBug("BUG-0004", true, admin.id);
 
-        assertThat(store.activeBugTasks(student.id))
-            .extracting(task -> task.id)
-            .containsExactly("BUG-0002", "BUG-0004");
+        assertThat(store.activeBugTasks(student.id)).isEmpty();
 
         var duplicatedBrand = store.createMaster("brand", Map.of("name", "学生端重复品牌"), student.id);
         var oversizedCategory = store.createMaster("category", Map.of("name", longCategoryName), student.id);
@@ -108,7 +116,6 @@ class TrainingCompetitionIntegrationTest {
         assertThat(oversizedCategory.workspaceOwnerId).isEqualTo(student.id);
 
         var brandReport = store.submitBugReport(student.id, Map.of(
-            "bugId", "BUG-0004",
             "title", "学员端商品品牌重复仍可保存",
             "moduleName", "商品品牌",
             "actualResult", "重复品牌保存成功",
@@ -116,8 +123,16 @@ class TrainingCompetitionIntegrationTest {
             "reproduceSteps", "学员登录后进入商品品牌，新增已有品牌名称并保存",
             "evidence", "学生端工作区返回保存成功"
         ));
+        var guessedReport = store.submitBugReport(student.id, Map.of(
+            "bugId", "BUG-0004",
+            "title", "手工填写编号不应绑定官方缺陷",
+            "moduleName", "商品品牌",
+            "actualResult", "重复品牌保存成功",
+            "expectedResult", "提示商品品牌名称不唯一",
+            "reproduceSteps", "即使手工带入缺陷编号，也只保存学员自己填写的报告内容",
+            "evidence", "学生端请求体中的编号不作为官方缺陷绑定依据"
+        ));
         var categoryReport = store.submitBugReport(student.id, Map.of(
-            "bugId", "BUG-0002",
             "title", "学员端商品分类超长名称仍可保存",
             "moduleName", "商品分类",
             "actualResult", "超长分类名称保存成功",
@@ -128,11 +143,27 @@ class TrainingCompetitionIntegrationTest {
 
         assertThat(store.bugReports(student.id))
             .extracting(report -> report.bugId)
-            .containsExactlyInAnyOrder("BUG-0002", "BUG-0004");
+            .containsOnly("");
         assertThat(brandReport.status).isEqualTo(BugReportStatus.PENDING);
+        assertThat(guessedReport.status).isEqualTo(BugReportStatus.PENDING);
         assertThat(categoryReport.status).isEqualTo(BugReportStatus.PENDING);
+        assertThat(brandReport.bugSummary).isBlank();
+        assertThat(guessedReport.bugSummary).isBlank();
+        assertThat(categoryReport.bugSummary).isBlank();
         assertThat(brandReport.studentName).isEqualTo("测试学员一");
+        assertThat(guessedReport.studentName).isEqualTo("测试学员一");
         assertThat(categoryReport.studentName).isEqualTo("测试学员一");
+
+        var guessedFile = store.submitCompetitionFile(student.id, Map.of(
+            "title", "手工编号文件提交",
+            "moduleName", "商品品牌",
+            "bugId", "BUG-0004",
+            "fileName", "evidence.pdf",
+            "contentType", "application/pdf",
+            "fileSize", "1024",
+            "storagePath", "uploads/competition/student01/evidence.pdf"
+        ));
+        assertThat(guessedFile.bugId).isBlank();
     }
 
     @Test
@@ -158,7 +189,6 @@ class TrainingCompetitionIntegrationTest {
 
         store.publishBug("BUG-0004", true, admin.id);
         var report = store.submitBugReport(store.userByUsername("student03").id, Map.of(
-            "bugId", "BUG-0004",
             "title", "新增学员提交报告",
             "moduleName", "商品品牌",
             "actualResult", "重复品牌保存成功",
@@ -308,6 +338,24 @@ class TrainingCompetitionIntegrationTest {
         assertThat(store.studentOperationLogs(store.userByUsername("superadmin").id, studentOne.id))
             .extracting(log -> log.moduleName)
             .contains("采购入库");
+    }
+
+    @Test
+    void cancelPublishClearsPublisherMetadata() {
+        var admin = store.userByUsername("admin");
+
+        var published = store.publishBug("BUG-0004", true, admin.id);
+        assertThat(published.active).isTrue();
+        assertThat(published.publisherId).isEqualTo(admin.id);
+        assertThat(published.publisherName).isEqualTo(admin.name);
+        assertThat(published.publishTime).isNotNull();
+
+        var unpublished = store.publishBug("BUG-0004", false, admin.id);
+
+        assertThat(unpublished.active).isFalse();
+        assertThat(unpublished.publisherId).isNull();
+        assertThat(unpublished.publisherName).isBlank();
+        assertThat(unpublished.publishTime).isNull();
     }
 
     @Test

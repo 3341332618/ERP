@@ -2,6 +2,7 @@
 target/
 *.class
 *.log
+logs/
 **/.mvn/wrapper/maven-wrapper.jar
 **/.mvn/wrapper/apache-maven-*/
 **/.mvn/wrapper/apache-maven-*.zip

@@ -5,10 +5,10 @@
         <div>
           <h2>{{ pageTitle }}</h2>
           <div class="competition-meta">
-            <span>已发布 {{ activeCount }} 条</span>
-            <span>报告 {{ reports.length }} 条</span>
-            <span>文件 {{ files.length }} 份</span>
-            <span>学员 {{ studentCount }} 人</span>
+            <span v-if="isBugPage">已发布 {{ activeCount }} 条</span>
+            <span v-if="isReportPage">报告 {{ reports.length }} 条</span>
+            <span v-if="isFilePage">文件 {{ files.length }} 份</span>
+            <span v-if="isStudentManagePage || isLogPage || isRankingPage">学员 {{ studentCount }} 人</span>
           </div>
         </div>
         <div class="header-actions">
@@ -90,32 +90,6 @@
           <el-table-column label="操作" width="110" fixed="right">
             <template #default="{ row }">
               <el-button text type="danger" @click="removeStudent(row)">删除学员</el-button>
-            </template>
-          </el-table-column>
-        </el-table>
-      </template>
-
-      <template v-if="isTaskPage">
-        <div class="toolbar">
-          <el-input v-model="query.keyword" placeholder="请输入缺陷编号/摘要查询" clearable style="width: 260px" />
-          <el-select v-model="query.moduleName" placeholder="请选择模块名称" clearable style="width: 180px">
-            <el-option v-for="item in taskModuleOptions" :key="item" :label="item" :value="item" />
-          </el-select>
-        </div>
-        <el-table :data="filteredTasks" border empty-text="暂无测试任务">
-          <el-table-column prop="id" label="缺陷编号" width="110" />
-          <el-table-column prop="moduleName" label="模块名称" width="120" />
-          <el-table-column prop="functionName" label="功能项" width="120" />
-          <el-table-column prop="summary" label="摘要描述" min-width="260" show-overflow-tooltip />
-          <el-table-column prop="severity" label="严重程度" width="100">
-            <template #default="{ row }">
-              <el-tag :type="severityType(row.severity)">{{ row.severity }}</el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column label="操作" width="180" fixed="right">
-            <template #default="{ row }">
-              <el-button text type="primary" @click="openSubmit(row)">提交报告</el-button>
-              <el-button text type="success" @click="openUploadFile(row)">提交文件</el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -251,11 +225,6 @@
 
     <el-dialog v-model="reportDialogVisible" title="提交缺陷报告" width="720px">
       <el-form label-width="110px" :model="reportForm">
-        <el-form-item label="缺陷任务">
-          <el-select v-model="reportForm.bugId" filterable placeholder="请选择缺陷任务" @change="fillBugForm">
-            <el-option v-for="item in tasks" :key="item.id" :label="`${item.id} ${item.summary}`" :value="item.id" />
-          </el-select>
-        </el-form-item>
         <el-form-item label="报告标题"><el-input v-model="reportForm.title" placeholder="请输入报告标题" /></el-form-item>
         <el-form-item label="模块名称"><el-input v-model="reportForm.moduleName" placeholder="请输入模块名称" /></el-form-item>
         <el-form-item label="复现步骤"><el-input v-model="reportForm.reproduceSteps" type="textarea" :rows="4" placeholder="请输入复现步骤" /></el-form-item>
@@ -275,11 +244,6 @@
         <el-form-item label="测试模块">
           <el-select v-model="uploadForm.moduleName" filterable allow-create default-first-option placeholder="请选择或输入测试模块">
             <el-option v-for="item in uploadModuleOptions" :key="item" :label="item" :value="item" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="关联缺陷">
-          <el-select v-model="uploadForm.bugId" filterable clearable placeholder="可选">
-            <el-option v-for="item in tasks" :key="item.id" :label="`${item.id} ${item.summary}`" :value="item.id" />
           </el-select>
         </el-form-item>
         <el-form-item label="测试文件">
@@ -350,7 +314,6 @@ import {
   listBugRankings,
   listBugReports,
   listCompetitionFiles,
-  listCompetitionTasks,
   listRankingHistory,
   listStudentOperationLogs,
   listStudents,
@@ -369,7 +332,6 @@ import {
 
 const route = useRoute()
 const bugs = ref<BugDefinition[]>([])
-const tasks = ref<BugDefinition[]>([])
 const reports = ref<BugReport[]>([])
 const files = ref<CompetitionFileSubmission[]>([])
 const logs = ref<StudentOperationLog[]>([])
@@ -396,11 +358,32 @@ const reportForm = reactive<Record<string, string>>({
 const reviewForm = reactive({ id: 0, status: 'APPROVED', score: 80, reviewComment: '' })
 const uploadForm = reactive({ title: '', moduleName: '', bugId: '' })
 const fileReviewForm = reactive({ id: 0, status: 'APPROVED', score: 80, roundName: '第1轮', reviewComment: '' })
+const defaultCompetitionModules = [
+  '商品品牌',
+  '商品分类',
+  '商品单位',
+  '商品管理',
+  '仓库信息',
+  '客户信息',
+  '供应商信息',
+  '采购入库',
+  '采购退货',
+  '库存分布',
+  '入库审核',
+  '出库审核',
+  '库存调拨',
+  '销售出库',
+  '销售退货',
+  '收入结算',
+  '支出结算'
+]
 
-const viewType = computed(() => String(route.params.type || 'bugs'))
+const viewType = computed(() => {
+  const type = String(route.params.type || 'bugs')
+  return type === 'tasks' ? 'my-reports' : type
+})
 const isBugPage = computed(() => viewType.value === 'bugs')
 const isStudentManagePage = computed(() => viewType.value === 'students')
-const isTaskPage = computed(() => viewType.value === 'tasks')
 const isAdminReportPage = computed(() => viewType.value === 'reports')
 const isStudentReportPage = computed(() => viewType.value === 'my-reports')
 const isReportPage = computed(() => isAdminReportPage.value || isStudentReportPage.value)
@@ -415,7 +398,6 @@ const isRankingPage = computed(() => viewType.value === 'rankings')
 const pageTitle = computed(() => ({
   bugs: '缺陷库发布',
   students: '学员管理',
-  tasks: '缺陷测试任务',
   reports: '学员报告评分',
   'my-reports': '我的缺陷报告',
   files: '文件评阅',
@@ -425,11 +407,14 @@ const pageTitle = computed(() => ({
   history: '评分历史',
   rankings: '竞赛排行榜'
 } as Record<string, string>)[viewType.value] || '测试竞赛')
-const activeCount = computed(() => bugs.value.filter((item) => item.active).length || tasks.value.length)
+const activeCount = computed(() => bugs.value.filter((item) => item.active).length)
 const studentCount = computed(() => students.value.length || rankings.value.length)
 const moduleOptions = computed(() => Array.from(new Set(bugs.value.map((item) => item.moduleName))).filter(Boolean))
-const taskModuleOptions = computed(() => Array.from(new Set(tasks.value.map((item) => item.moduleName))).filter(Boolean))
-const uploadModuleOptions = computed(() => Array.from(new Set([...tasks.value.map((item) => item.moduleName), ...files.value.map((item) => item.moduleName)])).filter(Boolean))
+const uploadModuleOptions = computed(() => Array.from(new Set([
+  ...defaultCompetitionModules,
+  ...reports.value.map((item) => item.moduleName),
+  ...files.value.map((item) => item.moduleName)
+])).filter(Boolean))
 const severityOptions = computed(() => Array.from(new Set(bugs.value.map((item) => item.severity))).filter(Boolean))
 const filteredBugs = computed(() => bugs.value.filter((item) => {
   const keyword = query.keyword.trim()
@@ -439,15 +424,9 @@ const filteredBugs = computed(() => bugs.value.filter((item) => {
   const matchActive = !query.active || String(item.active) === query.active
   return matchKeyword && matchModule && matchSeverity && matchActive
 }))
-const filteredTasks = computed(() => tasks.value.filter((item) => {
-  const keyword = query.keyword.trim()
-  const matchKeyword = !keyword || item.id.includes(keyword) || item.summary.includes(keyword)
-  const matchModule = !query.moduleName || item.moduleName === query.moduleName
-  return matchKeyword && matchModule
-}))
 const filteredReports = computed(() => reports.value.filter((item) => {
   const keyword = query.keyword.trim()
-  const matchKeyword = !keyword || item.bugId.includes(keyword) || item.title.includes(keyword)
+  const matchKeyword = !keyword || (item.bugId || '').includes(keyword) || item.title.includes(keyword)
   const matchStatus = !query.status || item.status === query.status
   return matchKeyword && matchStatus
 }))
@@ -490,9 +469,6 @@ async function load() {
   }
   if (isStudentManagePage.value || isLogPage.value) {
     students.value = await listStudents()
-  }
-  if (isTaskPage.value || isStudentReportPage.value || isStudentFilePage.value) {
-    tasks.value = await listCompetitionTasks()
   }
   if (isReportPage.value) {
     reports.value = await listBugReports()
@@ -547,30 +523,15 @@ async function removeStudent(row: StudentAccount) {
   await load()
 }
 
-function openSubmit(row?: BugDefinition) {
-  const selected = row || tasks.value[0]
-  if (!selected) {
-    ElMessage.warning('暂无可提交的缺陷测试任务')
-    return
-  }
-  reportForm.bugId = selected.id
-  reportForm.title = `发现${selected.moduleName}缺陷`
-  reportForm.moduleName = selected.moduleName
-  reportForm.reproduceSteps = selected.reproduceSteps
-  reportForm.expectedResult = selected.expectedResult
-  reportForm.actualResult = selected.actualResult
+function openSubmit() {
+  reportForm.bugId = ''
+  reportForm.title = ''
+  reportForm.moduleName = ''
+  reportForm.reproduceSteps = ''
+  reportForm.expectedResult = ''
+  reportForm.actualResult = ''
   reportForm.evidence = ''
   reportDialogVisible.value = true
-}
-
-function fillBugForm(id: string) {
-  const selected = tasks.value.find((item) => item.id === id)
-  if (!selected) return
-  reportForm.moduleName = selected.moduleName
-  reportForm.title = `发现${selected.moduleName}缺陷`
-  reportForm.reproduceSteps = selected.reproduceSteps
-  reportForm.expectedResult = selected.expectedResult
-  reportForm.actualResult = selected.actualResult
 }
 
 async function saveReport() {
@@ -580,11 +541,11 @@ async function saveReport() {
   await load()
 }
 
-function openUploadFile(row?: BugDefinition) {
+function openUploadFile() {
   selectedUploadFile.value = null
-  uploadForm.bugId = row?.id || ''
-  uploadForm.moduleName = row?.moduleName || uploadModuleOptions.value[0] || ''
-  uploadForm.title = row ? `${row.moduleName}测试材料` : ''
+  uploadForm.bugId = ''
+  uploadForm.moduleName = uploadModuleOptions.value[0] || ''
+  uploadForm.title = ''
   uploadDialogVisible.value = true
 }
 

@@ -30,8 +30,9 @@ public class CompetitionController {
     }
 
     @GetMapping("/bugs")
-    public ApiResult<?> bugs() {
-        return ApiResult.success(store.bugDefinitions());
+    public ApiResult<?> bugs(Authentication authentication) {
+        var user = store.userByUsername(authentication.getName());
+        return ApiResult.success(store.bugDefinitions(user.id));
     }
 
     @GetMapping("/students")
