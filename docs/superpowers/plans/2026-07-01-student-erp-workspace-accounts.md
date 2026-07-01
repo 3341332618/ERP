@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Give each testing student a dedicated ERP workspace with automatically generated role-specific ERP subaccounts.
+**Goal:** Give each testing student a dedicated ERP workspace with automatically generated role-specific ERP subaccounts isolated from other students.
 
 **Architecture:** Extend the existing `workspaceOwnerId` model to users. Student main accounts own workspaces; generated ERP subaccounts point to the owning student and reuse existing workspace filtering, document, stock, settlement, and operation-log logic.
 
@@ -145,9 +145,13 @@ Add this test:
 @Test
 void studentMainAccountUsesCompetitionOnlyAndErpSubaccountsUseOwnedWorkspace() {
     var student = store.userByUsername("student01");
+    var studentTwo = store.userByUsername("student02");
     var purchase = store.userByUsername("student01_purchase_staff");
     var warehouse = store.userByUsername("student01_warehouse_staff");
     var settlement = store.userByUsername("student01_settlement_manager");
+    var studentTwoPurchase = store.userByUsername("student02_purchase_staff");
+    var studentTwoWarehouse = store.userByUsername("student02_warehouse_staff");
+    var studentTwoSettlement = store.userByUsername("student02_settlement_manager");
 
     assertThat(store.menus(student.role))
         .extracting(menu -> menu.title)
@@ -164,9 +168,16 @@ void studentMainAccountUsesCompetitionOnlyAndErpSubaccountsUseOwnedWorkspace() {
 
     var inbound = store.createSimpleDocument("purchase-inbound", purchase.id);
     assertThat(inbound.workspaceOwnerId).isEqualTo(student.id);
+    assertThat(inbound.workspaceOwnerId).isNotEqualTo(studentTwo.id);
     store.submitDocument(inbound.id, purchase.id);
 
+    assertThat(store.documents("purchase-inbound", studentTwoPurchase.id))
+        .extracting(document -> document.documentNo)
+        .doesNotContain(inbound.documentNo);
     assertThat(store.auditList("inbound", store.userByUsername("warehouse_staff").id))
+        .extracting(document -> document.documentNo)
+        .doesNotContain(inbound.documentNo);
+    assertThat(store.auditList("inbound", studentTwoWarehouse.id))
         .extracting(document -> document.documentNo)
         .doesNotContain(inbound.documentNo);
     assertThat(store.auditList("inbound", warehouse.id))
@@ -176,9 +187,13 @@ void studentMainAccountUsesCompetitionOnlyAndErpSubaccountsUseOwnedWorkspace() {
     store.approve(inbound.id, warehouse.id);
 
     assertThat(store.stockViews(warehouse.id)).isNotEmpty();
+    assertThat(store.stockViews(studentTwoWarehouse.id)).isEmpty();
     assertThat(store.settlements("expense", settlement.id))
         .extracting(record -> record.relatedDocumentNo)
         .contains(inbound.documentNo);
+    assertThat(store.settlements("expense", studentTwoSettlement.id))
+        .extracting(record -> record.relatedDocumentNo)
+        .doesNotContain(inbound.documentNo);
     assertThat(store.studentOperationLogs(store.userByUsername("superadmin").id, student.id))
         .extracting(log -> log.moduleName)
         .contains("采购入库");
@@ -194,7 +209,7 @@ cd backend
 .\mvnw.cmd -Dtest=TrainingCompetitionIntegrationTest#studentMainAccountUsesCompetitionOnlyAndErpSubaccountsUseOwnedWorkspace test
 ```
 
-Expected: failure because student still has ERP menus or child workspace ownership is not used.
+Expected: failure because student still has ERP menus, child workspace ownership is not used, or same-role subaccounts across students are not isolated.
 
 - [ ] **Step 3: Update workspace owner resolution**
 
@@ -217,7 +232,7 @@ Update `first(String type, Long ownerId)` so exact workspace records are preferr
 
 - [ ] **Step 6: Filter audit and notifications by workspace**
 
-Update `auditList`, `documentWarehouseMatches`, `documentAuditWarehouseMatches`, and `notifyWarehouse` so platform warehouse staff only receive platform documents, while student warehouse staff receive documents where `document.workspaceOwnerId` equals their `workspaceOwnerId`.
+Update `auditList`, `documentWarehouseMatches`, `documentAuditWarehouseMatches`, and `notifyWarehouse` so platform warehouse staff only receive platform documents, while student warehouse staff receive documents where `document.workspaceOwnerId` equals their own `workspaceOwnerId`. This must compare student workspace owner ids, not just role names or warehouse ids, so `student01_warehouse_staff` never sees `student02` audit tasks.
 
 - [ ] **Step 7: Verify test passes**
 
@@ -425,6 +440,6 @@ Expected: commit succeeds with only intended files staged.
 
 ## Self-Review
 
-- Spec coverage: account generation, menus, workspace ownership, warehouse filtering, deletion cleanup, frontend display, and docs are all mapped to tasks.
+- Spec coverage: account generation, menus, workspace ownership, cross-student isolation, warehouse filtering, deletion cleanup, frontend display, and docs are all mapped to tasks.
 - Placeholder scan: no unfinished marker or open-ended implementation steps remain.
 - Type consistency: `workspaceOwnerId`, `StudentWorkspaceAccount`, and `erpAccounts` are consistently named across backend, API type, and UI tasks.
