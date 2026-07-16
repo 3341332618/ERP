@@ -9,9 +9,8 @@ const router = useRouter()
 const auth = useAuthStore()
 const loading = ref(false)
 const isShaking = ref(false)
-const form = reactive({ username: 'admin', password: '123456' })
+const form = reactive({ username: 'student01', password: '123456' })
 const demoAccounts = [
-  { label: '管理员', description: '全模块', username: 'admin' },
   { label: '学员', description: '测试端', username: 'student01' },
   { label: '终极管理', description: '评阅端', username: 'superadmin' }
 ]
@@ -217,7 +216,7 @@ async function submit() {
 
 .role-tabs {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 5px;
   margin: 22px 0 18px;
   padding: 4px;

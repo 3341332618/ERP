@@ -1,10 +1,45 @@
 <template>
   <div class="page">
     <div class="table-panel">
-      <div class="toolbar">
-        <el-button type="primary" @click="load">刷新</el-button>
+      <div class="toolbar query-toolbar">
+        <el-input v-model="query.keyword" placeholder="综合查询：任意字段" clearable style="width: 220px" />
+        <el-input v-model="query.documentNo" placeholder="请输入单据号" clearable style="width: 200px" />
+        <el-input v-model="query.warehouseCode" placeholder="请输入仓库编号" clearable style="width: 170px" />
+        <el-input v-model="query.warehouseName" placeholder="请输入仓库名称" clearable style="width: 170px" />
+        <span class="query-break" aria-hidden="true"></span>
+        <el-input v-model="query.businessType" placeholder="请输入业务类型" clearable style="width: 170px" />
+        <el-input v-model="query.itemCount" placeholder="请输入商品种类数" clearable style="width: 160px" />
+        <el-input v-model="query.creatorName" placeholder="请输入发起人" clearable style="width: 150px" />
+        <el-select v-model="query.status" placeholder="请选择审核状态" clearable style="width: 150px">
+          <el-option label="待审核" value="PENDING" />
+          <el-option label="审核通过" value="APPROVED" />
+          <el-option label="审核拒绝" value="REJECTED" />
+        </el-select>
+        <el-input v-model="query.auditorName" placeholder="请输入审核人" clearable style="width: 150px" />
+        <span class="query-break" aria-hidden="true"></span>
+        <el-date-picker
+          v-model="query.operationDateRange"
+          type="daterange"
+          value-format="YYYY-MM-DD"
+          start-placeholder="操作开始日期"
+          end-placeholder="操作结束日期"
+          range-separator="至"
+          style="width: 250px"
+        />
+        <el-date-picker
+          v-model="query.auditDateRange"
+          type="daterange"
+          value-format="YYYY-MM-DD"
+          start-placeholder="审核开始日期"
+          end-placeholder="审核结束日期"
+          range-separator="至"
+          style="width: 250px"
+        />
+        <span class="query-break" aria-hidden="true"></span>
+        <el-button type="primary" @click="load">查询</el-button>
+        <el-button @click="resetQuery">重置</el-button>
       </div>
-      <el-table :data="rows" border empty-text="暂无数据">
+      <el-table :data="filteredRows" border empty-text="暂无数据">
         <el-table-column type="index" label="序号" width="70" />
         <el-table-column prop="documentNo" label="单据号" min-width="190" />
         <el-table-column prop="warehouseCode" label="仓库编号" />
@@ -65,17 +100,43 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { approveAudit, listAudit, rejectAudit } from '../api'
 
 const route = useRoute()
 const rows = ref<any[]>([])
+const query = reactive({
+  keyword: '',
+  documentNo: '',
+  warehouseCode: '',
+  warehouseName: '',
+  businessType: '',
+  itemCount: '',
+  creatorName: '',
+  status: '',
+  auditorName: '',
+  operationDateRange: [] as string[],
+  auditDateRange: [] as string[]
+})
 const current = ref<any>()
 const dialogVisible = ref(false)
 const direction = computed(() => String(route.params.type).includes('inbound') ? 'inbound' : 'outbound')
 const quantityLabel = computed(() => direction.value === 'inbound' ? '入库数量' : '出库数量')
+const filteredRows = computed(() => rows.value.filter((row) =>
+  matchRecordByKeyword(row, query.keyword) &&
+  matchesText(row.documentNo, query.documentNo) &&
+  matchesText(row.warehouseCode, query.warehouseCode) &&
+  matchesText(row.warehouseName, query.warehouseName) &&
+  matchesText(businessType(row), query.businessType) &&
+  matchesText(row.items?.length, query.itemCount) &&
+  matchesText(row.creatorName, query.creatorName) &&
+  (!query.status || row.status === query.status) &&
+  matchesText(row.auditorName, query.auditorName) &&
+  inDateRange(row.operationTime, query.operationDateRange) &&
+  inDateRange(row.auditTime, query.auditDateRange)
+))
 const operationRecords = computed(() => {
   if (!current.value) return []
   const records = [
@@ -106,8 +167,49 @@ function businessType(row?: any) {
   } as Record<string, string>)[row.type] || (direction.value === 'inbound' ? '入库审核' : '出库审核')
 }
 
+function collectRecordValues(value: any): string[] {
+  if (value === null || value === undefined) return []
+  if (Array.isArray(value)) return value.flatMap((item) => collectRecordValues(item))
+  if (typeof value === 'object') return Object.values(value).flatMap((item) => collectRecordValues(item))
+  return [String(value)]
+}
+
+function matchRecordByKeyword(row: any, keyword: string) {
+  const trimmed = keyword.trim().toLowerCase()
+  if (!trimmed) return true
+  return collectRecordValues(row).some((value) => value.toLowerCase().includes(trimmed))
+}
+
+function matchesText(value: any, keyword: string) {
+  const trimmed = keyword.trim().toLowerCase()
+  if (!trimmed) return true
+  return String(value ?? '').toLowerCase().includes(trimmed)
+}
+
+function inDateRange(value: string | undefined, range: string[]) {
+  if (!range?.length || range.length !== 2) return true
+  if (!value) return false
+  const day = value.slice(0, 10)
+  return day >= range[0] && day <= range[1]
+}
+
 async function load() {
   rows.value = await listAudit(direction.value)
+}
+
+function resetQuery() {
+  query.keyword = ''
+  query.documentNo = ''
+  query.warehouseCode = ''
+  query.warehouseName = ''
+  query.businessType = ''
+  query.itemCount = ''
+  query.creatorName = ''
+  query.status = ''
+  query.auditorName = ''
+  query.operationDateRange = []
+  query.auditDateRange = []
+  load()
 }
 
 async function approve(row: any) {
@@ -125,5 +227,21 @@ async function reject(row: any) {
 }
 
 watch(direction, load)
+watch([
+  () => query.keyword,
+  () => query.documentNo,
+  () => query.warehouseCode,
+  () => query.warehouseName,
+  () => query.businessType,
+  () => query.itemCount,
+  () => query.creatorName,
+  () => query.status,
+  () => query.auditorName,
+  () => query.operationDateRange.join('|'),
+  () => query.auditDateRange.join('|')
+], () => {
+  current.value = undefined
+})
+
 onMounted(load)
 </script>

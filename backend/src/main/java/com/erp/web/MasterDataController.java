@@ -1,9 +1,8 @@
 package com.erp.web;
 
 import com.erp.common.ApiResult;
-import com.erp.domain.ErpModels.RoleCode;
-import com.erp.domain.ErpModels.Status;
-import com.erp.store.ErpStore;
+import com.erp.dto.MasterDataDtos.StatusRequest;
+import com.erp.service.MasterDataService;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -21,10 +20,10 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/masterdata")
 public class MasterDataController {
-    private final ErpStore store;
+    private final MasterDataService masterDataService;
 
-    public MasterDataController(ErpStore store) {
-        this.store = store;
+    public MasterDataController(MasterDataService masterDataService) {
+        this.masterDataService = masterDataService;
     }
 
     @GetMapping("/{type}")
@@ -32,37 +31,31 @@ public class MasterDataController {
                              @RequestParam(required = false) String keyword,
                              @RequestParam(required = false) String status,
                              Authentication authentication) {
-        var user = store.userByUsername(authentication.getName());
-        return ApiResult.success(store.masters(type, keyword, status, user.id));
+        return ApiResult.success(masterDataService.list(authentication.getName(), type, keyword, status));
     }
 
     @PostMapping("/{type}")
     public ApiResult<?> create(@PathVariable String type, @RequestBody Map<String, String> payload, Authentication authentication) {
-        var user = store.userByUsername(authentication.getName());
-        return ApiResult.success(store.createMaster(type, payload, user.id));
+        return ApiResult.success(masterDataService.create(authentication.getName(), type, payload));
     }
 
     @PostMapping("/product/import")
     public ApiResult<?> importProducts(@RequestBody List<Map<String, String>> rows, Authentication authentication) {
-        var user = store.userByUsername(authentication.getName());
-        return ApiResult.success(store.importProducts(rows, user.id));
+        return ApiResult.success(masterDataService.importProducts(authentication.getName(), rows));
     }
 
     @PutMapping("/{type}/{id}")
     public ApiResult<?> update(@PathVariable String type, @PathVariable Long id, @RequestBody Map<String, String> payload, Authentication authentication) {
-        var user = store.userByUsername(authentication.getName());
-        return ApiResult.success(store.updateMaster(type, id, payload, user.id));
+        return ApiResult.success(masterDataService.update(authentication.getName(), type, id, payload));
     }
 
     @PatchMapping("/{type}/{id}/status")
-    public ApiResult<?> status(@PathVariable String type, @PathVariable Long id, @RequestBody Map<String, String> payload, Authentication authentication) {
-        var user = store.userByUsername(authentication.getName());
-        return ApiResult.success(store.changeMasterStatus(type, id, Status.valueOf(payload.get("status")), user.id));
+    public ApiResult<?> status(@PathVariable String type, @PathVariable Long id, @RequestBody StatusRequest request, Authentication authentication) {
+        return ApiResult.success(masterDataService.changeStatus(authentication.getName(), type, id, request));
     }
 
     @GetMapping("/warehouse-staff")
     public ApiResult<?> warehouseStaff(Authentication authentication) {
-        var user = store.userByUsername(authentication.getName());
-        return ApiResult.success(store.usersByRole(RoleCode.WAREHOUSE_STAFF, user.id));
+        return ApiResult.success(masterDataService.warehouseStaff(authentication.getName()));
     }
 }

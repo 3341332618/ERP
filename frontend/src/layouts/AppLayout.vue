@@ -112,8 +112,12 @@ async function loadMessages() {
 function handleCommand(command: string) {
   if (command === 'profile') router.push('/profile')
   if (command === 'logout') {
-    auth.logout()
-    router.push('/login')
+    const target = auth.logoutCurrentIdentity()
+    if (target === 'student') {
+      router.push('/competition/my-reports')
+    } else {
+      router.push('/login')
+    }
   }
 }
 </script>

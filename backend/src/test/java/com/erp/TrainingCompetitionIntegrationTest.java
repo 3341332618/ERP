@@ -8,7 +8,9 @@ import com.erp.store.ErpStore;
 import com.erp.support.InMemoryBusinessTest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.crypto.password.PasswordEncoder;
 
+import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -19,9 +21,62 @@ class TrainingCompetitionIntegrationTest {
     @Autowired
     ErpStore store;
 
+    @Autowired
+    PasswordEncoder passwordEncoder;
+
+    @Test
+    void superAdminResetsStudentMainAndErpAccountPasswordsToDefault() {
+        var admin = store.userByUsername("superadmin");
+        var student = store.userByUsername("student01");
+        var studentTwo = store.userByUsername("student02");
+        var resetUsernames = List.of(
+            "student01",
+            "student01_admin",
+            "student01_purchase_staff",
+            "student01_warehouse_staff",
+            "student01_sales_staff",
+            "student01_settlement_manager"
+        );
+        resetUsernames.forEach(username -> store.updatePasswordHash(
+            store.userByUsername(username).id,
+            passwordEncoder.encode("654321")
+        ));
+        var studentTwoPasswordHash = studentTwo.passwordHash;
+
+        var resetCount = store.resetStudentPassword(admin.id, student.id);
+
+        assertThat(resetCount).isEqualTo(6);
+        assertThat(resetUsernames).allSatisfy(username ->
+            assertThat(passwordEncoder.matches(
+                ErpStore.DEFAULT_PASSWORD,
+                store.userByUsername(username).passwordHash
+            )).isTrue()
+        );
+        assertThat(store.userByUsername("student02").passwordHash).isEqualTo(studentTwoPasswordHash);
+    }
+
+    @Test
+    void studentCannotResetAnotherStudentPassword() {
+        var student = store.userByUsername("student01");
+        var studentTwo = store.userByUsername("student02");
+
+        assertThatThrownBy(() -> store.resetStudentPassword(student.id, studentTwo.id))
+            .isInstanceOf(BusinessException.class)
+            .hasMessageContaining("终极管理员");
+    }
+
+    @Test
+    void resetStudentPasswordRejectsNonStudentTarget() {
+        var admin = store.userByUsername("superadmin");
+
+        assertThatThrownBy(() -> store.resetStudentPassword(admin.id, admin.id))
+            .isInstanceOf(BusinessException.class)
+            .hasMessageContaining("学员");
+    }
+
     @Test
     void bugLibraryCoversImportedTrainingListAndSupportsPublishReportReviewRanking() {
-        var admin = store.userByUsername("admin");
+        var admin = store.userByUsername("superadmin");
         var student = store.userByUsername("student01");
 
         assertThat(store.bugDefinitions()).hasSize(79);
@@ -79,7 +134,7 @@ class TrainingCompetitionIntegrationTest {
 
     @Test
     void publishedBugsStayHiddenFromStudentsButEnableDefectiveBehavior() {
-        var admin = store.userByUsername("admin");
+        var admin = store.userByUsername("superadmin");
         var student = store.userByUsername("student01");
 
         assertThat(store.activeBugTasks(student.id)).isEmpty();
@@ -168,7 +223,7 @@ class TrainingCompetitionIntegrationTest {
 
     @Test
     void adminCanCreateAndDeleteStudentAccounts() {
-        var admin = store.userByUsername("admin");
+        var admin = store.userByUsername("superadmin");
 
         assertThat(store.students(admin.id))
             .extracting(student -> student.username)
@@ -223,7 +278,7 @@ class TrainingCompetitionIntegrationTest {
 
     @Test
     void creatingStudentAutomaticallyCreatesRoleSpecificErpAccounts() {
-        var admin = store.userByUsername("admin");
+        var admin = store.userByUsername("superadmin");
 
         var created = store.createStudent(admin.id, Map.of(
             "username", "student_auto",
@@ -255,12 +310,15 @@ class TrainingCompetitionIntegrationTest {
 
     @Test
     void studentWorkspaceAdminUsesOwnedErpMenusWithoutPlatformCompetitionPermissions() {
-        var platformAdmin = store.userByUsername("admin");
+        var platformAdmin = store.userByUsername("superadmin");
         var workspaceAdmin = store.userByUsername("student01_admin");
 
+        assertThatThrownBy(() -> store.userByUsername("admin"))
+            .isInstanceOf(BusinessException.class)
+            .hasMessageContaining("登录账号不存在");
         assertThat(store.menus(platformAdmin))
             .extracting(menu -> menu.title)
-            .contains("基础信息管理", "采购管理", "库存管理", "销售管理", "结算管理", "测试竞赛管理");
+            .containsExactly("测试竞赛后台");
         assertThat(store.menus(workspaceAdmin))
             .extracting(menu -> menu.title)
             .containsExactly("基础信息管理", "采购管理", "库存管理", "销售管理", "结算管理");
@@ -329,7 +387,7 @@ class TrainingCompetitionIntegrationTest {
 
     @Test
     void deletingStudentRemovesSubaccountsAndWorkspaceData() {
-        var admin = store.userByUsername("admin");
+        var admin = store.userByUsername("superadmin");
         var created = store.createStudent(admin.id, Map.of(
             "username", "student_delete",
             "name", "删除学员",
@@ -486,7 +544,7 @@ class TrainingCompetitionIntegrationTest {
 
     @Test
     void cancelPublishClearsPublisherMetadata() {
-        var admin = store.userByUsername("admin");
+        var admin = store.userByUsername("superadmin");
 
         var published = store.publishBug("BUG-0004", true, admin.id);
         assertThat(published.active).isTrue();
@@ -504,7 +562,7 @@ class TrainingCompetitionIntegrationTest {
 
     @Test
     void selectedBugDefinitionsToggleRealDefectiveBehavior() {
-        var admin = store.userByUsername("admin");
+        var admin = store.userByUsername("superadmin");
 
         store.createMaster("brand", Map.of("name", "竞赛重复品牌"));
         assertThatThrownBy(() -> store.createMaster("brand", Map.of("name", "竞赛重复品牌")))

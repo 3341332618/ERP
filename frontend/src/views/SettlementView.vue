@@ -1,11 +1,25 @@
 <template>
   <div class="page">
     <div class="table-panel">
-      <div class="toolbar">
-        <el-input v-model="keyword" placeholder="请输入结算单号查询" clearable style="width: 260px" />
-        <el-select v-model="documentType" placeholder="请选择单据类型" clearable style="width: 180px">
+      <div class="toolbar query-toolbar">
+        <el-input v-model="query.keyword" placeholder="综合查询：任意字段" clearable style="width: 220px" />
+        <el-input v-model="query.settlementNo" :placeholder="`请输入${title}单号`" clearable style="width: 210px" />
+        <el-select v-model="query.documentType" placeholder="请选择单据类型" clearable style="width: 180px">
           <el-option v-for="item in typeOptions" :key="item" :label="item" :value="item" />
         </el-select>
+        <el-input v-model="query.amount" placeholder="请输入金额" clearable style="width: 150px" />
+        <el-input v-model="query.relatedDocumentNo" placeholder="请输入关联单据号" clearable style="width: 210px" />
+        <span class="query-break" aria-hidden="true"></span>
+        <el-date-picker
+          v-model="query.createDateRange"
+          type="daterange"
+          value-format="YYYY-MM-DD"
+          start-placeholder="创建开始日期"
+          end-placeholder="创建结束日期"
+          range-separator="至"
+          style="width: 250px"
+        />
+        <span class="query-break" aria-hidden="true"></span>
         <el-button type="primary" @click="load">查询</el-button>
         <el-button @click="reset">重置</el-button>
       </div>
@@ -80,14 +94,20 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { listSettlement, settlementDetail } from '../api'
 
 const route = useRoute()
 const rows = ref<any[]>([])
-const keyword = ref('')
-const documentType = ref('')
+const query = reactive({
+  keyword: '',
+  settlementNo: '',
+  documentType: '',
+  amount: '',
+  relatedDocumentNo: '',
+  createDateRange: [] as string[]
+})
 const currentPage = ref(1)
 const pageSize = ref(10)
 const detailVisible = ref(false)
@@ -97,9 +117,13 @@ const direction = computed(() => String(route.params.type) === 'income' ? 'incom
 const title = computed(() => direction.value === 'income' ? '收入结算' : '支出结算')
 const typeOptions = computed(() => direction.value === 'income' ? ['销出收入', '采退收入'] : ['采入支出', '销退支出', '其他支出'])
 const filteredRows = computed(() => rows.value.filter((row) => {
-  const matchNo = !keyword.value || row.settlementNo.includes(keyword.value)
-  const matchType = !documentType.value || row.documentType === documentType.value
-  return matchNo && matchType
+  const matchKeyword = matchRecordByKeyword(row, query.keyword)
+  const matchSettlementNo = matchesText(row.settlementNo, query.settlementNo)
+  const matchType = !query.documentType || row.documentType === query.documentType
+  const matchAmount = matchesText(row.amount, query.amount)
+  const matchRelatedNo = matchesText(row.relatedDocumentNo, query.relatedDocumentNo)
+  const matchCreateDate = inDateRange(row.createTime, query.createDateRange)
+  return matchKeyword && matchSettlementNo && matchType && matchAmount && matchRelatedNo && matchCreateDate
 }))
 const pagedRows = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value
@@ -120,9 +144,39 @@ async function load() {
 }
 
 function reset() {
-  keyword.value = ''
-  documentType.value = ''
+  query.keyword = ''
+  query.settlementNo = ''
+  query.documentType = ''
+  query.amount = ''
+  query.relatedDocumentNo = ''
+  query.createDateRange = []
   load()
+}
+
+function collectRecordValues(value: any): string[] {
+  if (value === null || value === undefined) return []
+  if (Array.isArray(value)) return value.flatMap((item) => collectRecordValues(item))
+  if (typeof value === 'object') return Object.values(value).flatMap((item) => collectRecordValues(item))
+  return [String(value)]
+}
+
+function matchRecordByKeyword(row: any, keyword: string) {
+  const trimmed = keyword.trim().toLowerCase()
+  if (!trimmed) return true
+  return collectRecordValues(row).some((value) => value.toLowerCase().includes(trimmed))
+}
+
+function matchesText(value: any, keyword: string) {
+  const trimmed = keyword.trim().toLowerCase()
+  if (!trimmed) return true
+  return String(value ?? '').toLowerCase().includes(trimmed)
+}
+
+function inDateRange(value: string | undefined, range: string[]) {
+  if (!range?.length || range.length !== 2) return true
+  if (!value) return false
+  const day = value.slice(0, 10)
+  return day >= range[0] && day <= range[1]
 }
 
 async function openDetail(row: any) {
@@ -132,7 +186,15 @@ async function openDetail(row: any) {
 }
 
 watch(direction, load)
-watch([keyword, documentType, pageSize], () => {
+watch([
+  () => query.keyword,
+  () => query.settlementNo,
+  () => query.documentType,
+  () => query.amount,
+  () => query.relatedDocumentNo,
+  () => query.createDateRange.join('|'),
+  pageSize
+], () => {
   currentPage.value = 1
 })
 onMounted(load)

@@ -17,6 +17,107 @@ export interface CurrentUser {
   createTime: string
 }
 
+export type BusinessPayload = Record<string, string | number | null | undefined>
+export type DecimalValue = number | string
+
+export interface MasterRecord {
+  id: number
+  type?: string
+  code: string
+  name: string
+  categoryName?: string | null
+  brandName?: string | null
+  unitName?: string | null
+  purchasePrice?: DecimalValue | null
+  salePrice?: DecimalValue | null
+  imageData?: string | null
+  contact?: string | null
+  phone?: string | null
+  address?: string | null
+  settlementMethod?: string | null
+  warehouseUserId?: number | null
+  workspaceOwnerId?: number | null
+  status: string
+  createTime?: string
+  updateTime?: string | null
+}
+
+export interface DocumentItem {
+  productId: number
+  productCode: string
+  productName: string
+  categoryName: string
+  brandName: string
+  unitName: string
+  quantity: DecimalValue
+  price: DecimalValue
+  amount: DecimalValue
+  availableQuantity: DecimalValue
+  remark: string
+}
+
+export interface DocumentRecord {
+  id: number
+  type: string
+  documentNo: string
+  relatedDocumentNo?: string | null
+  warehouseId: number
+  warehouseCode: string
+  warehouseName: string
+  targetWarehouseId?: number | null
+  targetWarehouseCode?: string | null
+  targetWarehouseName?: string | null
+  partnerId?: number | null
+  partnerCode?: string | null
+  partnerName?: string | null
+  items: DocumentItem[]
+  totalAmount: DecimalValue
+  status: string
+  creatorId: number
+  creatorName: string
+  operationTime: string
+  auditorName?: string | null
+  auditTime?: string | null
+  rejectReason?: string | null
+}
+
+export interface StockRow {
+  warehouseId: number
+  warehouseCode: string
+  warehouseName: string
+  productId: number
+  productCode: string
+  productName: string
+  categoryName: string
+  brandName: string
+  unitName: string
+  actualQuantity: DecimalValue
+  availableQuantity: DecimalValue
+}
+
+export interface ReturnItemOption {
+  productId: number
+  productCode: string
+  productName: string
+  unitName: string
+  price: DecimalValue
+  originalQuantity: DecimalValue
+  returnedQuantity: DecimalValue
+  remainingQuantity: DecimalValue
+}
+
+export interface ReturnDocumentOption {
+  documentId: number
+  documentNo: string
+  warehouseId: number
+  warehouseCode: string
+  warehouseName: string
+  partnerId: number
+  partnerCode: string
+  partnerName: string
+  items: ReturnItemOption[]
+}
+
 export function login(data: { username: string; password: string }) {
   return http.post('/auth/login', data) as Promise<{ token: string; user: CurrentUser; menus: MenuNode[] }>
 }
@@ -38,15 +139,15 @@ export function fetchMessages() {
 }
 
 export function listMaster(type: string, params: Record<string, string>) {
-  return http.get(`/masterdata/${type}`, { params }) as Promise<any[]>
+  return http.get(`/masterdata/${type}`, { params }) as Promise<MasterRecord[]>
 }
 
-export function createMaster(type: string, data: Record<string, string>) {
-  return http.post(`/masterdata/${type}`, data)
+export function createMaster(type: string, data: BusinessPayload) {
+  return http.post(`/masterdata/${type}`, data) as Promise<MasterRecord>
 }
 
-export function updateMaster(type: string, id: number, data: Record<string, string>) {
-  return http.put(`/masterdata/${type}/${id}`, data)
+export function updateMaster(type: string, id: number, data: BusinessPayload) {
+  return http.put(`/masterdata/${type}/${id}`, data) as Promise<MasterRecord>
 }
 
 export function changeMasterStatus(type: string, id: number, status: string) {
@@ -54,15 +155,25 @@ export function changeMasterStatus(type: string, id: number, status: string) {
 }
 
 export function listDocuments(type: string) {
-  return http.get(`/documents/${type}`) as Promise<any[]>
+  return http.get(`/documents/${type}`) as Promise<DocumentRecord[]>
 }
 
-export function createDocument(type: string, data: Record<string, string> = {}) {
-  return http.post(`/documents/${type}`, data) as Promise<any>
+export function documentDetail(type: string, id: number) {
+  return http.get(`/documents/${type}/${id}`) as Promise<DocumentRecord>
 }
 
-export function updateDocument(type: string, id: number, data: Record<string, string> = {}) {
-  return http.put(`/documents/${type}/${id}`, data) as Promise<any>
+export function listReturnOptions(type: string, editingId?: number) {
+  return http.get(`/documents/${type}/return-options`, {
+    params: editingId === undefined ? {} : { editingId }
+  }) as Promise<ReturnDocumentOption[]>
+}
+
+export function createDocument(type: string, data: BusinessPayload = {}) {
+  return http.post(`/documents/${type}`, data) as Promise<DocumentRecord>
+}
+
+export function updateDocument(type: string, id: number, data: BusinessPayload = {}) {
+  return http.put(`/documents/${type}/${id}`, data) as Promise<DocumentRecord>
 }
 
 export function submitDocument(type: string, id: number) {
@@ -73,8 +184,10 @@ export function deleteDocument(type: string, id: number) {
   return http.delete(`/documents/${type}/${id}`) as Promise<any>
 }
 
-export function listStock() {
-  return http.get('/inventory/stock') as Promise<any[]>
+export function listStock(editingId?: number) {
+  return http.get('/inventory/stock', {
+    params: editingId === undefined ? {} : { editingId }
+  }) as Promise<StockRow[]>
 }
 
 export function listAudit(direction: string) {
@@ -98,7 +211,7 @@ export function settlementDetail(direction: string, id: number) {
 }
 
 export function importProducts(rows: Record<string, string>[]) {
-  return http.post('/masterdata/product/import', rows) as Promise<any[]>
+  return http.post('/masterdata/product/import', rows) as Promise<MasterRecord[]>
 }
 
 export interface BugDefinition {
@@ -203,6 +316,10 @@ export function listStudents() {
 
 export function createStudent(data: { username: string; name: string; phone: string; password: string }) {
   return http.post('/competition/students', data) as Promise<StudentAccount>
+}
+
+export function resetStudentPassword(id: number) {
+  return http.post(`/competition/students/${id}/reset-password`) as Promise<{ resetCount: number }>
 }
 
 export function deleteStudent(id: number) {

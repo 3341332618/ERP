@@ -2,8 +2,12 @@ package com.erp.store;
 
 import com.erp.common.BusinessException;
 import com.erp.domain.ErpModels.*;
+import com.erp.dto.DocumentDtos.ReturnDocumentOption;
+import com.erp.dto.DocumentDtos.ReturnItemOption;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
@@ -25,7 +29,10 @@ import java.util.function.Predicate;
 
 @Service
 public class ErpStore {
+    public static final String DEFAULT_PASSWORD = "123456";
+
     private final PasswordEncoder passwordEncoder;
+    private final ErpRealtimeRepository realtimeRepository;
     private final AtomicLong ids = new AtomicLong(1000);
     private final Map<Long, User> users = new LinkedHashMap<>();
     private final Map<String, MasterRecord> master = new LinkedHashMap<>();
@@ -44,14 +51,32 @@ public class ErpStore {
     private int productSeq = 1;
     private int documentSeq = 1;
     private int settlementSeq = 1;
+    private boolean realtimeReady;
+
+    @Autowired
+    public ErpStore(PasswordEncoder passwordEncoder, ObjectProvider<ErpRealtimeRepository> realtimeRepositoryProvider) {
+        this(passwordEncoder, realtimeRepositoryProvider.getIfAvailable());
+    }
 
     public ErpStore(PasswordEncoder passwordEncoder) {
+        this(passwordEncoder, (ErpRealtimeRepository) null);
+    }
+
+    public ErpStore(PasswordEncoder passwordEncoder, ErpRealtimeRepository realtimeRepository) {
         this.passwordEncoder = passwordEncoder;
-        seed();
+        this.realtimeRepository = realtimeRepository;
+        if (realtimeRepository != null && realtimeRepository.hasBusinessData()) {
+            restoreFromDatabase(realtimeRepository.loadBusinessData());
+        } else {
+            seed();
+            if (realtimeRepository != null) {
+                realtimeRepository.insertInitialData(currentData());
+            }
+        }
+        this.realtimeReady = true;
     }
 
     private void seed() {
-        createUser("admin", "系统管理员", "13800000001", RoleCode.ADMIN, null);
         createUser("superadmin", "终极管理员", "13800000000", RoleCode.SUPER_ADMIN, null);
         createUser("purchase_manager", "采购主管", "13800000002", RoleCode.PURCHASE_MANAGER, null);
         createUser("purchase_staff", "采购专员", "13800000003", RoleCode.PURCHASE_STAFF, null);
@@ -61,8 +86,8 @@ public class ErpStore {
         createUser("sales_manager", "销售主管", "13800000006", RoleCode.SALES_MANAGER, null);
         createUser("sales_staff", "销售专员", "13800000007", RoleCode.SALES_STAFF, null);
         createUser("settlement_manager", "结算主管", "13800000008", RoleCode.SETTLEMENT_MANAGER, null);
-        createStudentWorkspace("student01", "测试学员一", "13900000001", "123456");
-        createStudentWorkspace("student02", "测试学员二", "13900000002", "123456");
+        createStudentWorkspace("student01", "测试学员一", "13900000001", DEFAULT_PASSWORD);
+        createStudentWorkspace("student02", "测试学员二", "13900000002", DEFAULT_PASSWORD);
 
         var brand = createMaster("brand", Map.of("name", "连想"));
         var category = createMaster("category", Map.of("name", "办公设备"));
@@ -102,7 +127,7 @@ public class ErpStore {
     }
 
     private User createUser(String username, String name, String phone, RoleCode role, Long warehouseId) {
-        return createUser(username, name, phone, role, warehouseId, "123456");
+        return createUser(username, name, phone, role, warehouseId, DEFAULT_PASSWORD);
     }
 
     private User createUser(String username, String name, String phone, RoleCode role, Long warehouseId, String password) {
@@ -162,6 +187,18 @@ public class ErpStore {
     public User updateAvatar(Long userId, String avatarData) {
         var user = userById(userId);
         user.avatar = validatedImage(avatarData);
+        if (realtimeEnabled()) {
+            realtimeRepository.updateUser(user);
+        }
+        return user;
+    }
+
+    public User updatePasswordHash(Long userId, String passwordHash) {
+        var user = userById(userId);
+        user.passwordHash = passwordHash;
+        if (realtimeEnabled()) {
+            realtimeRepository.updateUser(user);
+        }
         return user;
     }
 
@@ -181,9 +218,6 @@ public class ErpStore {
             menus.add(inventoryMenu());
             menus.add(salesMenu());
             menus.add(settlementMenu());
-            if (workspaceOwnerId == null) {
-                menus.add(competitionAdminMenu());
-            }
         }
         if (role == RoleCode.SUPER_ADMIN) {
             menus.add(competitionSuperAdminMenu());
@@ -243,14 +277,6 @@ public class ErpStore {
             .add(new MenuNode("支出结算", "/settlement/expense"));
     }
 
-    private MenuNode competitionAdminMenu() {
-        return new MenuNode("测试竞赛管理", "/competition/bugs")
-            .add(new MenuNode("缺陷库发布", "/competition/bugs"))
-            .add(new MenuNode("学员管理", "/competition/students"))
-            .add(new MenuNode("学员报告评分", "/competition/reports"))
-            .add(new MenuNode("竞赛排行榜", "/competition/rankings"));
-    }
-
     private MenuNode competitionSuperAdminMenu() {
         return new MenuNode("测试竞赛后台", "/competition/students")
             .add(new MenuNode("学员管理", "/competition/students"))
@@ -302,8 +328,38 @@ public class ErpStore {
         if (users.values().stream().anyMatch(user -> user.username.equals(username))) {
             throw new BusinessException("学员账号已存在，请重新输入。");
         }
-        var password = textOrDefault(payload, "password", "123456");
-        return studentView(createStudentWorkspace(username, name, phone, password));
+        var password = textOrDefault(payload, "password", DEFAULT_PASSWORD);
+        var studentUser = createStudentWorkspace(username, name, phone, password);
+        if (realtimeEnabled()) {
+            var workspaceUsers = users.values().stream()
+                .filter(user -> user.id.equals(studentUser.id) || Objects.equals(user.workspaceOwnerId, studentUser.id))
+                .toList();
+            var workspaceMasters = master.values().stream()
+                .filter(record -> Objects.equals(record.workspaceOwnerId, studentUser.id))
+                .toList();
+            realtimeRepository.insertStudentWorkspace(studentUser, workspaceUsers, workspaceMasters);
+        }
+        return studentView(studentUser);
+    }
+
+    public int resetStudentPassword(Long operatorId, Long studentId) {
+        requireSuperAdmin(userById(operatorId));
+        var student = userById(studentId);
+        if (student.role != RoleCode.STUDENT || !Objects.equals(student.workspaceOwnerId, student.id)) {
+            throw new BusinessException("只能重置测试学员账号密码。");
+        }
+        var workspaceUsers = users.values().stream()
+            .filter(user -> user.id.equals(student.id) || Objects.equals(user.workspaceOwnerId, student.id))
+            .toList();
+        var passwordHashes = new LinkedHashMap<Long, String>();
+        workspaceUsers.forEach(user ->
+            passwordHashes.put(user.id, passwordEncoder.encode(DEFAULT_PASSWORD))
+        );
+        if (realtimeEnabled()) {
+            realtimeRepository.updateUserPasswordHashes(passwordHashes);
+        }
+        workspaceUsers.forEach(user -> user.passwordHash = passwordHashes.get(user.id));
+        return workspaceUsers.size();
     }
 
     public void deleteStudent(Long operatorId, Long studentId) {
@@ -326,6 +382,9 @@ public class ErpStore {
         competitionFiles.removeIf(file -> file.studentId.equals(student.id));
         studentOperationLogs.removeIf(log -> log.studentId.equals(student.id));
         rankingHistoryRecords.removeIf(history -> history.studentId.equals(student.id));
+        if (realtimeEnabled()) {
+            realtimeRepository.deleteStudentWorkspace(student.id, removedUserIds);
+        }
     }
 
     public BugDefinition publishBug(String bugId, boolean active, Long operatorId) {
@@ -341,6 +400,9 @@ public class ErpStore {
             bug.publisherId = null;
             bug.publisherName = "";
             bug.publishTime = null;
+        }
+        if (realtimeEnabled()) {
+            realtimeRepository.updateBugDefinition(bug);
         }
         return bug;
     }
@@ -375,6 +437,9 @@ public class ErpStore {
         report.studentId = student.id;
         report.studentName = student.name;
         bugReports.add(report);
+        if (realtimeEnabled()) {
+            realtimeRepository.insertBugReport(report, databaseWorkspaceId(student.id));
+        }
         return report;
     }
 
@@ -393,6 +458,9 @@ public class ErpStore {
         report.reviewerId = reviewer.id;
         report.reviewerName = reviewer.name;
         report.reviewTime = LocalDateTime.now();
+        if (realtimeEnabled()) {
+            realtimeRepository.updateBugReport(report);
+        }
         return report;
     }
 
@@ -415,6 +483,9 @@ public class ErpStore {
         submission.studentId = student.id;
         submission.studentName = student.name;
         competitionFiles.add(submission);
+        if (realtimeEnabled()) {
+            realtimeRepository.insertCompetitionFile(submission, databaseWorkspaceId(student.id));
+        }
         recordStudentOperation(student.id, submission.moduleName, "提交测试文件", submission.title + "：" + submission.fileName);
         return submission;
     }
@@ -446,6 +517,9 @@ public class ErpStore {
         submission.reviewerName = reviewer.name;
         submission.reviewTime = LocalDateTime.now();
         appendRankingHistory(submission.roundName, submission.studentId);
+        if (realtimeEnabled()) {
+            realtimeRepository.updateCompetitionFile(submission);
+        }
         return submission;
     }
 
@@ -469,6 +543,9 @@ public class ErpStore {
         log.actionName = actionName;
         log.detail = detail;
         studentOperationLogs.add(log);
+        if (realtimeEnabled()) {
+            realtimeRepository.insertOperationLog(log, databaseWorkspaceId(student.id));
+        }
         return log;
     }
 
@@ -521,9 +598,13 @@ public class ErpStore {
 
     public List<MasterRecord> masters(String type, String keyword, String status, Long userId) {
         var ownerId = workspaceOwnerId(userId);
-        return master.values().stream()
+        var visibleRecords = master.values().stream()
             .filter(record -> workspaceVisible(record.workspaceOwnerId, ownerId))
             .filter(record -> record.type.equals(type))
+            .toList();
+        return visibleRecords.stream()
+            .filter(record -> record.workspaceOwnerId != null
+                || !isPublicMasterShadowed(record, visibleRecords, ownerId))
             .filter(record -> keyword == null || keyword.isBlank()
                 || (record.code != null && record.code.contains(keyword))
                 || record.name.contains(keyword))
@@ -532,21 +613,68 @@ public class ErpStore {
             .toList();
     }
 
+    private boolean isPublicMasterShadowed(MasterRecord source,
+                                           List<MasterRecord> visibleRecords,
+                                           Long ownerId) {
+        if (ownerId == null || source.workspaceOwnerId != null) {
+            return false;
+        }
+        return visibleRecords.stream()
+            .filter(candidate -> Objects.equals(candidate.workspaceOwnerId, ownerId))
+            .filter(candidate -> candidate.type.equals(source.type))
+            .anyMatch(candidate -> Objects.equals(candidate.name, source.name)
+                || sameMasterSourceCode(source.code, candidate.code, ownerId));
+    }
+
+    private boolean sameMasterSourceCode(String publicCode, String localCode, Long ownerId) {
+        if (publicCode == null || localCode == null) {
+            return false;
+        }
+        var localSuffix = "-S" + ownerId;
+        var sourceCode = localCode.endsWith(localSuffix)
+            ? localCode.substring(0, localCode.length() - localSuffix.length())
+            : localCode;
+        return publicCode.equals(sourceCode);
+    }
+
     public MasterRecord createMaster(String type, Map<String, String> payload) {
         return createMaster(type, payload, null);
     }
 
-    public MasterRecord createMaster(String type, Map<String, String> payload, Long userId) {
-        return createMaster(type, payload, userId, true);
+    public synchronized MasterRecord createMaster(String type, Map<String, String> payload, Long userId) {
+        var ownerId = workspaceOwnerId(userId);
+        var record = buildMasterRecord(type, payload, ownerId);
+        var referenceCopies = productReferenceCopies(record, ownerId);
+        var warehouseStaff = validatedWarehouseStaff(record);
+        persistMasterRecords(referenceCopies, record);
+        publishMasterRecords(referenceCopies);
+        master.put(record.type + ":" + record.id, record);
+        bindWarehouseStaff(record, warehouseStaff);
+        if (ownerId != null) {
+            recordStudentOperation(ownerId, displayName(type), "新增资料", record.name);
+        }
+        return record;
     }
 
     private MasterRecord createMaster(String type, Map<String, String> payload, Long userId, boolean recordOperation) {
         var ownerId = workspaceOwnerId(userId);
-        var name = validatedMasterName(type, null, payload.get("name"), ownerId);
+        var record = buildMasterRecord(type, payload, ownerId);
+        var referenceCopies = productReferenceCopies(record, ownerId);
+        var warehouseStaff = validatedWarehouseStaff(record);
+        publishMasterRecords(referenceCopies);
+        master.put(record.type + ":" + record.id, record);
+        bindWarehouseStaff(record, warehouseStaff);
+        if (recordOperation && ownerId != null) {
+            recordStudentOperation(ownerId, displayName(type), "新增资料", record.name);
+        }
+        return record;
+    }
+
+    private MasterRecord buildMasterRecord(String type, Map<String, String> payload, Long ownerId) {
         var record = new MasterRecord();
         record.id = ids.incrementAndGet();
         record.type = type;
-        record.name = name;
+        record.name = validatedMasterName(type, null, payload.get("name"), ownerId);
         record.code = nextMasterCode(type, payload);
         record.categoryName = payload.get("categoryName");
         record.brandName = payload.get("brandName");
@@ -562,11 +690,6 @@ public class ErpStore {
             record.warehouseUserId = Long.valueOf(payload.get("warehouseUserId"));
         }
         record.workspaceOwnerId = ownerId;
-        master.put(type + ":" + record.id, record);
-        bindWarehouseStaff(record);
-        if (recordOperation && ownerId != null) {
-            recordStudentOperation(ownerId, displayName(type), "新增资料", record.name);
-        }
         return record;
     }
 
@@ -574,7 +697,7 @@ public class ErpStore {
         return updateMaster(type, id, payload, null);
     }
 
-    public MasterRecord updateMaster(String type, Long id, Map<String, String> payload, Long userId) {
+    public synchronized MasterRecord updateMaster(String type, Long id, Map<String, String> payload, Long userId) {
         var ownerId = workspaceOwnerId(userId);
         var record = writableMasterRecord(type, id, ownerId);
         record.name = validatedMasterName(type, record.id, payload.get("name"), ownerId);
@@ -592,11 +715,13 @@ public class ErpStore {
         record.updateTime = LocalDateTime.now();
         if ("warehouse".equals(type) && payload.containsKey("warehouseUserId")) {
             record.warehouseUserId = Long.valueOf(payload.get("warehouseUserId"));
-            bindWarehouseStaff(record);
         }
-        if ("product".equals(type)) {
-            record.code = productCode(record.categoryName, record.brandName, productSeq - 1);
-        }
+        var referenceCopies = productReferenceCopies(record, ownerId);
+        var warehouseStaff = validatedWarehouseStaff(record);
+        persistMasterRecords(referenceCopies, record);
+        publishMasterRecords(referenceCopies);
+        master.put(record.type + ":" + record.id, record);
+        bindWarehouseStaff(record, warehouseStaff);
         if (ownerId != null) {
             recordStudentOperation(ownerId, displayName(type), "修改资料", record.name);
         }
@@ -661,14 +786,18 @@ public class ErpStore {
         return changeMasterStatus(type, id, status, null);
     }
 
-    public MasterRecord changeMasterStatus(String type, Long id, Status status, Long userId) {
+    public synchronized MasterRecord changeMasterStatus(String type, Long id, Status status, Long userId) {
         var ownerId = workspaceOwnerId(userId);
         var record = writableMasterRecord(type, id, ownerId);
         if (status == Status.DISABLED) {
             assertCanDisable(record);
         }
+        var referenceCopies = productReferenceCopies(record, ownerId);
         record.status = status;
         record.updateTime = LocalDateTime.now();
+        persistMasterRecords(referenceCopies, record);
+        publishMasterRecords(referenceCopies);
+        master.put(record.type + ":" + record.id, record);
         if (ownerId != null) {
             recordStudentOperation(ownerId, displayName(type), "调整状态", record.name + "：" + status.label);
         }
@@ -700,21 +829,35 @@ public class ErpStore {
         return record;
     }
 
-    private MasterRecord writableMasterRecord(String type, Long id, Long ownerId) {
+    private MasterRecord enabledMasterRecordForWorkspace(String type, Long id, Long ownerId) {
         var record = masterRecordForWorkspace(type, id, ownerId);
+        if (record.status != Status.ENABLED) {
+            throw new BusinessException(displayName(type) + "已停用，请重新选择。");
+        }
         if (ownerId == null || Objects.equals(record.workspaceOwnerId, ownerId)) {
             return record;
         }
-        var copy = copyMasterRecord(record, ownerId);
-        master.put(type + ":" + copy.id, copy);
-        return copy;
+        return materializeMasterReference(record, ownerId);
     }
 
-    private MasterRecord copyMasterRecord(MasterRecord source, Long ownerId) {
+    private MasterRecord writableMasterRecord(String type, Long id, Long ownerId) {
+        var visible = masterRecordForWorkspace(type, id, ownerId);
+        var source = visible;
+        if (ownerId != null && !Objects.equals(visible.workspaceOwnerId, ownerId)) {
+            var existing = localizedCopyForSource(visible, ownerId);
+            if (existing == null) {
+                return copyMasterRecord(visible, ownerId);
+            }
+            source = existing;
+        }
+        return cloneMasterRecord(source);
+    }
+
+    private MasterRecord cloneMasterRecord(MasterRecord source) {
         var copy = new MasterRecord();
-        copy.id = ids.incrementAndGet();
+        copy.id = source.id;
         copy.type = source.type;
-        copy.code = source.code == null ? null : source.code + "-S" + ownerId;
+        copy.code = source.code;
         copy.name = source.name;
         copy.categoryName = source.categoryName;
         copy.brandName = source.brandName;
@@ -727,9 +870,134 @@ public class ErpStore {
         copy.address = source.address;
         copy.settlementMethod = source.settlementMethod;
         copy.warehouseUserId = source.warehouseUserId;
+        copy.workspaceOwnerId = source.workspaceOwnerId;
+        copy.status = source.status;
+        copy.createTime = source.createTime;
+        copy.updateTime = source.updateTime;
+        return copy;
+    }
+
+    private MasterRecord copyMasterRecord(MasterRecord source, Long ownerId) {
+        var copy = new MasterRecord();
+        copy.id = ids.incrementAndGet();
+        copy.type = source.type;
+        copy.code = localizedMasterCode(source, ownerId);
+        copy.name = source.name;
+        copy.categoryName = source.categoryName;
+        copy.brandName = source.brandName;
+        copy.unitName = source.unitName;
+        copy.purchasePrice = source.purchasePrice;
+        copy.salePrice = source.salePrice;
+        copy.imageData = source.imageData;
+        copy.contact = source.contact;
+        copy.phone = source.phone;
+        copy.address = source.address;
+        copy.settlementMethod = source.settlementMethod;
+        copy.warehouseUserId = "warehouse".equals(source.type) && ownerId != null ? null : source.warehouseUserId;
         copy.workspaceOwnerId = ownerId;
         copy.status = source.status;
         copy.createTime = LocalDateTime.now();
+        return copy;
+    }
+
+    private String localizedMasterCode(MasterRecord source, Long ownerId) {
+        return source.code == null ? null : source.code + "-S" + ownerId;
+    }
+
+    private MasterRecord localizedCopyForSource(MasterRecord source, Long ownerId) {
+        var localizedCode = localizedMasterCode(source, ownerId);
+        return master.values().stream()
+            .filter(candidate -> Objects.equals(candidate.workspaceOwnerId, ownerId))
+            .filter(candidate -> candidate.type.equals(source.type))
+            .filter(candidate -> localizedCode == null
+                ? candidate.name.equals(source.name)
+                : localizedCode.equals(candidate.code))
+            .findFirst()
+            .orElse(null);
+    }
+
+    private List<MasterRecord> productReferenceCopies(MasterRecord record, Long ownerId) {
+        if (!"product".equals(record.type)) {
+            return List.of();
+        }
+        var copies = new ArrayList<MasterRecord>();
+        record.categoryName = validateProductReference("category", record.categoryName, ownerId, copies);
+        record.brandName = validateProductReference("brand", record.brandName, ownerId, copies);
+        record.unitName = validateProductReference("unit", record.unitName, ownerId, copies);
+        return copies;
+    }
+
+    private String validateProductReference(String type,
+                                            String name,
+                                            Long ownerId,
+                                            List<MasterRecord> copies) {
+        if (name == null || name.isBlank()) {
+            throw new BusinessException(displayName(type) + "请选择已存在且启用的数据。");
+        }
+        var normalized = name.trim();
+        var local = master.values().stream()
+            .filter(record -> Objects.equals(record.workspaceOwnerId, ownerId))
+            .filter(record -> record.type.equals(type))
+            .filter(record -> record.name.equals(normalized))
+            .findFirst()
+            .orElse(null);
+        if (local != null) {
+            if (local.status != Status.ENABLED) {
+                throw new BusinessException(displayName(type) + "已停用，请重新选择。");
+            }
+            return normalized;
+        }
+        var source = master.values().stream()
+            .filter(record -> record.workspaceOwnerId == null)
+            .filter(record -> record.type.equals(type))
+            .filter(record -> record.name.equals(normalized))
+            .filter(record -> record.status == Status.ENABLED)
+            .findFirst()
+            .orElse(null);
+        if (source == null) {
+            throw new BusinessException(displayName(type) + "请选择已存在且启用的数据。");
+        }
+        if (ownerId != null) {
+            var localized = localizedCopyForSource(source, ownerId);
+            if (localized != null) {
+                if (localized.status != Status.ENABLED) {
+                    throw new BusinessException(displayName(type) + "已停用，请重新选择。");
+                }
+                return localized.name;
+            }
+            copies.add(copyMasterRecord(source, ownerId));
+        }
+        return normalized;
+    }
+
+    private void persistMasterRecords(List<MasterRecord> referenceCopies, MasterRecord record) {
+        if (!realtimeEnabled()) {
+            return;
+        }
+        var records = new ArrayList<MasterRecord>(referenceCopies);
+        records.add(record);
+        realtimeRepository.upsertMasters(records);
+    }
+
+    private void publishMasterRecords(List<MasterRecord> records) {
+        records.forEach(record -> master.put(record.type + ":" + record.id, record));
+    }
+
+    private synchronized MasterRecord materializeMasterReference(MasterRecord source, Long ownerId) {
+        var existing = localizedCopyForSource(source, ownerId);
+        if (existing != null) {
+            if (existing.status != Status.ENABLED) {
+                throw new BusinessException(displayName(source.type) + "已停用，请重新选择。");
+            }
+            return existing;
+        }
+        var copy = copyMasterRecord(source, ownerId);
+        var referenceCopies = productReferenceCopies(copy, ownerId);
+        var warehouseStaff = validatedWarehouseStaff(copy);
+        persistMasterRecords(referenceCopies, copy);
+        publishMasterRecords(referenceCopies);
+        master.put(copy.type + ":" + copy.id, copy);
+        bindWarehouseStaff(copy, warehouseStaff);
         return copy;
     }
 
@@ -782,7 +1050,7 @@ public class ErpStore {
 
     public List<DocumentRecord> documents(String typeCode, Long userId) {
         var user = userById(userId);
-        var type = DocumentType.byCode(typeCode);
+        var type = documentType(typeCode);
         return documents.values().stream()
             .filter(document -> document.type == type)
             .filter(document -> canSeeDocument(user, document))
@@ -790,12 +1058,105 @@ public class ErpStore {
             .toList();
     }
 
+    public synchronized List<ReturnDocumentOption> returnOptions(Long operatorId, String typeCode, Long editingId) {
+        var operator = userById(operatorId);
+        var returnType = documentType(typeCode);
+        if (!isReturnType(returnType)) {
+            throw new BusinessException("仅退货单支持选择来源单据");
+        }
+        var ownerId = workspaceOwnerId(operatorId);
+        if (editingId != null) {
+            var editing = getDocument(editingId, operatorId);
+            if (editing.type != returnType
+                || !editing.creatorId.equals(operatorId)
+                || !Objects.equals(editing.workspaceOwnerId, ownerId)) {
+                throw new BusinessException("退货单编辑上下文无效");
+            }
+        }
+        var sourceType = returnType == DocumentType.PURCHASE_RETURN
+            ? DocumentType.PURCHASE_INBOUND
+            : DocumentType.SALES_OUTBOUND;
+        return documents.values().stream()
+            .filter(source -> source.type == sourceType)
+            .filter(source -> source.status == DocumentStatus.APPROVED)
+            .filter(source -> Objects.equals(source.workspaceOwnerId, ownerId))
+            .filter(source -> source.creatorId.equals(operator.id))
+            .map(source -> new ReturnDocumentOption(
+                source.id,
+                source.documentNo,
+                source.warehouseId,
+                source.warehouseCode,
+                source.warehouseName,
+                source.partnerId,
+                source.partnerCode,
+                source.partnerName,
+                returnItemOptions(source, returnType, editingId)
+            ))
+            .filter(option -> !option.items().isEmpty())
+            .sorted(Comparator.comparing((ReturnDocumentOption option) -> getDocument(option.documentId()).operationTime).reversed())
+            .toList();
+    }
+
+    private List<ReturnItemOption> returnItemOptions(DocumentRecord source, DocumentType returnType, Long editingId) {
+        var options = new ArrayList<ReturnItemOption>();
+        var seenProductIds = new ArrayList<Long>();
+        for (var sourceItem : source.items) {
+            if (seenProductIds.contains(sourceItem.productId)) {
+                continue;
+            }
+            seenProductIds.add(sourceItem.productId);
+            var originalQuantity = source.items.stream()
+                .filter(item -> item.productId.equals(sourceItem.productId))
+                .map(item -> item.quantity)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+            var returnedQuantity = returnedQuantity(
+                returnType,
+                source.workspaceOwnerId,
+                source.documentNo,
+                sourceItem.productId,
+                editingId
+            );
+            var remainingQuantity = originalQuantity.subtract(returnedQuantity);
+            if (remainingQuantity.compareTo(BigDecimal.ZERO) <= 0) {
+                continue;
+            }
+            options.add(new ReturnItemOption(
+                sourceItem.productId,
+                sourceItem.productCode,
+                sourceItem.productName,
+                sourceItem.unitName,
+                sourceItem.price,
+                originalQuantity,
+                returnedQuantity,
+                remainingQuantity
+            ));
+        }
+        return options;
+    }
+
+    private BigDecimal returnedQuantity(DocumentType returnType,
+                                        Long ownerId,
+                                        String sourceDocumentNo,
+                                        Long productId,
+                                        Long editingId) {
+        return documents.values().stream()
+            .filter(existing -> editingId == null || !existing.id.equals(editingId))
+            .filter(existing -> existing.type == returnType)
+            .filter(existing -> Objects.equals(existing.workspaceOwnerId, ownerId))
+            .filter(existing -> sourceDocumentNo.equals(existing.relatedDocumentNo))
+            .filter(existing -> existing.status != DocumentStatus.REJECTED)
+            .flatMap(existing -> existing.items.stream())
+            .filter(existingItem -> existingItem.productId.equals(productId))
+            .map(existingItem -> existingItem.quantity)
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
     public DocumentRecord createSimpleDocument(String typeCode, Long userId) {
         return createDocument(typeCode, userId, Map.of());
     }
 
-    public DocumentRecord createDocument(String typeCode, Long userId, Map<String, ?> payload) {
-        var type = DocumentType.byCode(typeCode);
+    public synchronized DocumentRecord createDocument(String typeCode, Long userId, Map<String, ?> payload) {
+        var type = documentType(typeCode);
         var document = new DocumentRecord();
         document.id = ids.incrementAndGet();
         document.type = type;
@@ -807,8 +1168,11 @@ public class ErpStore {
         fillDocumentParties(document);
         var data = payload == null ? Map.<String, Object>of() : payload;
         applyDocumentPayload(document, data);
-        document.items.add(data.isEmpty() ? defaultItem(document) : documentItem(document, data));
+        document.items.add(data.isEmpty() ? defaultItem(document) : documentItem(document, data, null));
         recalc(document);
+        if (realtimeEnabled()) {
+            realtimeRepository.insertDocument(document);
+        }
         documents.put(document.id, document);
         if (document.workspaceOwnerId != null) {
             recordStudentOperation(document.workspaceOwnerId, document.type.label, "新建单据", document.documentNo);
@@ -816,25 +1180,75 @@ public class ErpStore {
         return document;
     }
 
-    public DocumentRecord updateDocument(String typeCode, Long id, Long userId, Map<String, ?> payload) {
-        var document = getDocument(id);
-        if (document.type != DocumentType.byCode(typeCode)) {
+    public synchronized DocumentRecord updateDocument(String typeCode, Long id, Long userId, Map<String, ?> payload) {
+        var current = getDocument(id);
+        if (current.type != documentType(typeCode)) {
             throw new BusinessException("单据类型不匹配");
         }
-        if (!document.creatorId.equals(userId)) {
+        if (!current.creatorId.equals(userId)) {
             throw new BusinessException("只能修改本人发起的单据");
         }
-        if (document.status != DocumentStatus.DRAFT && document.status != DocumentStatus.REJECTED) {
+        if (current.status != DocumentStatus.DRAFT && current.status != DocumentStatus.REJECTED) {
             throw new BusinessException("当前状态不可修改");
         }
+        var document = cloneDocumentRecord(current);
         var data = payload == null ? Map.<String, Object>of() : payload;
         fillDocumentParties(document);
         applyDocumentPayload(document, data);
         document.items.clear();
-        document.items.add(data.isEmpty() ? defaultItem(document) : documentItem(document, data));
+        document.items.add(data.isEmpty() ? defaultItem(document) : documentItem(document, data, document.id));
         document.operationTime = LocalDateTime.now();
         recalc(document);
+        if (realtimeEnabled()) {
+            realtimeRepository.updateDocument(document);
+        }
+        documents.put(document.id, document);
         return document;
+    }
+
+    private DocumentRecord cloneDocumentRecord(DocumentRecord source) {
+        var copy = new DocumentRecord();
+        copy.id = source.id;
+        copy.type = source.type;
+        copy.documentNo = source.documentNo;
+        copy.relatedDocumentNo = source.relatedDocumentNo;
+        copy.warehouseId = source.warehouseId;
+        copy.warehouseCode = source.warehouseCode;
+        copy.warehouseName = source.warehouseName;
+        copy.targetWarehouseId = source.targetWarehouseId;
+        copy.targetWarehouseCode = source.targetWarehouseCode;
+        copy.targetWarehouseName = source.targetWarehouseName;
+        copy.partnerId = source.partnerId;
+        copy.partnerCode = source.partnerCode;
+        copy.partnerName = source.partnerName;
+        source.items.stream().map(this::cloneDocumentItem).forEach(copy.items::add);
+        copy.totalAmount = source.totalAmount;
+        copy.status = source.status;
+        copy.creatorId = source.creatorId;
+        copy.creatorName = source.creatorName;
+        copy.workspaceOwnerId = source.workspaceOwnerId;
+        copy.operationTime = source.operationTime;
+        copy.auditorId = source.auditorId;
+        copy.auditorName = source.auditorName;
+        copy.auditTime = source.auditTime;
+        copy.rejectReason = source.rejectReason;
+        return copy;
+    }
+
+    private DocumentItem cloneDocumentItem(DocumentItem source) {
+        var copy = new DocumentItem();
+        copy.productId = source.productId;
+        copy.productCode = source.productCode;
+        copy.productName = source.productName;
+        copy.categoryName = source.categoryName;
+        copy.brandName = source.brandName;
+        copy.unitName = source.unitName;
+        copy.quantity = source.quantity;
+        copy.price = source.price;
+        copy.amount = source.amount;
+        copy.availableQuantity = source.availableQuantity;
+        copy.remark = source.remark;
+        return copy;
     }
 
     public DocumentRecord getDocument(Long id) {
@@ -854,7 +1268,15 @@ public class ErpStore {
         return document;
     }
 
-    public DocumentRecord submitDocument(Long id, Long userId) {
+    public DocumentRecord documentDetail(String typeCode, Long id, Long userId) {
+        var document = getDocument(id, userId);
+        if (document.type != documentType(typeCode)) {
+            throw new BusinessException("单据类型不匹配");
+        }
+        return document;
+    }
+
+    public synchronized DocumentRecord submitDocument(Long id, Long userId) {
         var document = getDocument(id);
         if (!document.creatorId.equals(userId)) {
             throw new BusinessException("只能提交本人发起的单据");
@@ -868,16 +1290,22 @@ public class ErpStore {
         if (document.workspaceOwnerId != null) {
             recordStudentOperation(document.workspaceOwnerId, document.type.label, "提交审核", document.documentNo);
         }
+        if (realtimeEnabled()) {
+            realtimeRepository.updateDocument(document);
+        }
         return document;
     }
 
-    public DocumentRecord deleteDocument(Long id, Long userId) {
+    public synchronized DocumentRecord deleteDocument(Long id, Long userId) {
         var document = getDocument(id);
         if (!document.creatorId.equals(userId)) {
             throw new BusinessException("只能删除本人发起的单据");
         }
         if (document.status != DocumentStatus.DRAFT && document.status != DocumentStatus.REJECTED) {
             throw new BusinessException("当前状态不可删除");
+        }
+        if (realtimeEnabled()) {
+            realtimeRepository.deleteDocument(document);
         }
         documents.remove(id);
         if (document.workspaceOwnerId != null) {
@@ -927,27 +1355,41 @@ public class ErpStore {
         if (document.workspaceOwnerId != null) {
             recordStudentOperation(document.workspaceOwnerId, document.type.label, "审核通过", document.documentNo);
         }
+        if (realtimeEnabled()) {
+            realtimeRepository.updateDocument(document);
+        }
         return document;
     }
 
-    public DocumentRecord reject(Long id, Long auditorId, String reason) {
+    public synchronized DocumentRecord reject(Long id, Long auditorId, String reason) {
         require(reason, "拒绝原因必填，请重新输入。");
         if (reason.length() > 160 && !activeBug("BUG-0042")) {
             throw new BusinessException("拒绝原因不能超过160位字符，请重新输入。");
         }
         var auditor = userById(auditorId);
-        var document = getDocument(id);
-        if (!Objects.equals(document.workspaceOwnerId, workspaceOwnerId(auditor.id))) {
+        var current = getDocument(id);
+        if (!Objects.equals(current.workspaceOwnerId, workspaceOwnerId(auditor.id))) {
             throw new BusinessException("只能审核所属工作区单据");
         }
         if (auditor.role != RoleCode.WAREHOUSE_STAFF) {
             throw new BusinessException("当前角色无审核权限");
         }
+        if (current.status != DocumentStatus.PENDING) {
+            throw new BusinessException("当前状态不可审核");
+        }
+        if (!documentWarehouseMatches(auditor, current)) {
+            throw new BusinessException("只能审核所属仓库单据");
+        }
+        var document = cloneDocumentRecord(current);
         document.status = DocumentStatus.REJECTED;
         document.auditorId = auditor.id;
         document.auditorName = auditor.name;
         document.auditTime = LocalDateTime.now();
         document.rejectReason = reason;
+        if (realtimeEnabled()) {
+            realtimeRepository.updateDocument(document);
+        }
+        documents.put(document.id, document);
         if (document.workspaceOwnerId != null) {
             recordStudentOperation(document.workspaceOwnerId, document.type.label, "审核拒绝", document.documentNo);
         }
@@ -972,8 +1414,12 @@ public class ErpStore {
     }
 
     public List<Map<String, Object>> stockViews(Long userId) {
+        return stockViews(userId, null);
+    }
+
+    public List<Map<String, Object>> stockViews(Long userId, Long editingId) {
         var ownerId = workspaceOwnerId(userId);
-        recalcAvailable(ownerId);
+        var excludedDocumentId = validatedStockEditingId(userId, editingId, ownerId);
         return stockList(userId).stream()
             .<Map<String, Object>>map(stock -> {
                 var warehouse = masterRecordForWorkspace("warehouse", stock.warehouseId, ownerId);
@@ -990,10 +1436,29 @@ public class ErpStore {
                 row.put("unitName", product.unitName);
                 row.put("imageData", product.imageData);
                 row.put("actualQuantity", stock.actualQuantity);
-                row.put("availableQuantity", stock.availableQuantity);
+                row.put("availableQuantity", available(
+                    stock.warehouseId,
+                    stock.productId,
+                    ownerId,
+                    excludedDocumentId
+                ));
                 return row;
             })
             .toList();
+    }
+
+    private Long validatedStockEditingId(Long userId, Long editingId, Long ownerId) {
+        if (editingId == null) {
+            return null;
+        }
+        var document = documents.get(editingId);
+        if (document == null
+            || !document.creatorId.equals(userId)
+            || !Objects.equals(document.workspaceOwnerId, ownerId)
+            || (document.status != DocumentStatus.DRAFT && document.status != DocumentStatus.REJECTED)) {
+            throw new BusinessException("单据编辑上下文无效");
+        }
+        return document.id;
     }
 
     public List<SettlementRecord> settlements(String direction) {
@@ -1095,11 +1560,11 @@ public class ErpStore {
             return;
         }
         var sourceWarehouse = payload.containsKey("warehouseId")
-            ? masterRecordForWorkspace("warehouse", longRequired(payload, "warehouseId", document.type == DocumentType.STOCK_TRANSFER ? "调出仓库必填，请重新输入。" : "仓库必填，请重新输入。"), document.workspaceOwnerId)
-            : masterRecordForWorkspace("warehouse", document.warehouseId, document.workspaceOwnerId);
+            ? enabledMasterRecordForWorkspace("warehouse", longRequired(payload, "warehouseId", document.type == DocumentType.STOCK_TRANSFER ? "调出仓库必填，请重新输入。" : "仓库必填，请重新输入。"), document.workspaceOwnerId)
+            : enabledMasterRecordForWorkspace("warehouse", document.warehouseId, document.workspaceOwnerId);
         setWarehouse(document, sourceWarehouse);
         if (document.type == DocumentType.STOCK_TRANSFER) {
-            var targetWarehouse = masterRecordForWorkspace("warehouse", longRequired(payload, "targetWarehouseId", "调入仓库必填，请重新输入。"), document.workspaceOwnerId);
+            var targetWarehouse = enabledMasterRecordForWorkspace("warehouse", longRequired(payload, "targetWarehouseId", "调入仓库必填，请重新输入。"), document.workspaceOwnerId);
             if (sourceWarehouse.id.equals(targetWarehouse.id)) {
                 throw new BusinessException("调入仓库不能与调出仓库相同，请重新选择。");
             }
@@ -1113,24 +1578,39 @@ public class ErpStore {
         }
         if (payload.containsKey("partnerId")) {
             var partnerType = document.type == DocumentType.PURCHASE_INBOUND || document.type == DocumentType.PURCHASE_RETURN ? "supplier" : "customer";
-            setPartner(document, masterRecordForWorkspace(partnerType, longRequired(payload, "partnerId", partnerLabel(document.type) + "必填，请重新输入。"), document.workspaceOwnerId));
+            setPartner(document, enabledMasterRecordForWorkspace(partnerType, longRequired(payload, "partnerId", partnerLabel(document.type) + "必填，请重新输入。"), document.workspaceOwnerId));
         }
     }
 
-    private DocumentItem documentItem(DocumentRecord document, Map<String, ?> payload) {
-        var product = masterRecordForWorkspace("product", longRequired(payload, "productId", "商品必填，请重新输入。"), document.workspaceOwnerId);
+    private DocumentItem documentItem(DocumentRecord document, Map<String, ?> payload, Long excludedDocumentId) {
+        var productId = longRequired(payload, "productId", "商品必填，请重新输入。");
+        var sourceItem = isReturnType(document.type) ? returnSourceItem(document, productId) : null;
+        var product = sourceItem == null
+            ? enabledMasterRecordForWorkspace("product", productId, document.workspaceOwnerId)
+            : null;
         var item = new DocumentItem();
-        item.productId = product.id;
-        item.productCode = product.code;
-        item.productName = product.name;
-        item.categoryName = product.categoryName;
-        item.brandName = product.brandName;
-        item.unitName = product.unitName;
+        if (sourceItem != null) {
+            item.productId = sourceItem.productId;
+            item.productCode = sourceItem.productCode;
+            item.productName = sourceItem.productName;
+            item.categoryName = sourceItem.categoryName;
+            item.brandName = sourceItem.brandName;
+            item.unitName = sourceItem.unitName;
+        } else {
+            item.productId = product.id;
+            item.productCode = product.code;
+            item.productName = product.name;
+            item.categoryName = product.categoryName;
+            item.brandName = product.brandName;
+            item.unitName = product.unitName;
+        }
         item.quantity = quantityRequired(text(payload, "quantity"), quantityMessage(document.type));
         item.price = document.type == DocumentType.STOCK_TRANSFER
             ? BigDecimal.ZERO
-            : money(payload.containsKey("price") ? text(payload, "price") : defaultPrice(document.type, product).toString());
-        item.availableQuantity = available(document.warehouseId, product.id, document.workspaceOwnerId);
+            : sourceItem != null
+                ? sourceItem.price
+                : money(payload.containsKey("price") ? text(payload, "price") : defaultPrice(document.type, product).toString());
+        item.availableQuantity = available(document.warehouseId, item.productId, document.workspaceOwnerId, excludedDocumentId);
         item.remark = text(payload, "remark");
         if (document.type == DocumentType.STOCK_TRANSFER) {
             require(item.remark, "备注必填，请重新输入。");
@@ -1140,6 +1620,14 @@ public class ErpStore {
             throw new BusinessException("可用库存不足，请重新输入" + stockQuantityLabel(document.type) + "。");
         }
         return item;
+    }
+
+    private DocumentItem returnSourceItem(DocumentRecord document, Long productId) {
+        var source = findDocumentByNo(document.relatedDocumentNo, document.workspaceOwnerId);
+        return source.items.stream()
+            .filter(item -> item.productId.equals(productId))
+            .findFirst()
+            .orElseThrow(() -> new BusinessException(stockQuantityLabel(document.type) + "输入有误，请重新输入。"));
     }
 
     private void setWarehouse(DocumentRecord document, MasterRecord warehouse) {
@@ -1186,6 +1674,14 @@ public class ErpStore {
 
     private String partnerLabel(DocumentType type) {
         return type == DocumentType.PURCHASE_INBOUND || type == DocumentType.PURCHASE_RETURN ? "供应商" : "客户";
+    }
+
+    private DocumentType documentType(String typeCode) {
+        try {
+            return DocumentType.byCode(typeCode);
+        } catch (IllegalArgumentException exception) {
+            throw new BusinessException("未知单据类型");
+        }
     }
 
     private boolean isReturnType(DocumentType type) {
@@ -1325,6 +1821,9 @@ public class ErpStore {
                 message.title = title;
                 message.content = "【" + message.title + "】单据号：" + document.documentNo + " 待审核 " + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
                 messages.add(message);
+                if (realtimeEnabled()) {
+                    realtimeRepository.insertMessage(message);
+                }
             });
     }
 
@@ -1355,6 +1854,9 @@ public class ErpStore {
         }
         stock.actualQuantity = next;
         stock.availableQuantity = available(warehouseId, productId, ownerId);
+        if (realtimeEnabled()) {
+            realtimeRepository.upsertStock(stock);
+        }
     }
 
     private StockBalance stock(Long warehouseId, Long productId) {
@@ -1381,6 +1883,13 @@ public class ErpStore {
     }
 
     private BigDecimal available(Long warehouseId, Long productId, Long ownerId) {
+        return available(warehouseId, productId, ownerId, null);
+    }
+
+    private BigDecimal available(Long warehouseId,
+                                 Long productId,
+                                 Long ownerId,
+                                 Long excludedDocumentId) {
         var actual = stocks.stream()
             .filter(stock -> stock.warehouseId.equals(warehouseId) && stock.productId.equals(productId))
             .filter(stock -> Objects.equals(stock.workspaceOwnerId, ownerId))
@@ -1388,6 +1897,7 @@ public class ErpStore {
             .findFirst()
             .orElse(BigDecimal.ZERO);
         var reserved = documents.values().stream()
+            .filter(document -> excludedDocumentId == null || !document.id.equals(excludedDocumentId))
             .filter(document -> Objects.equals(document.workspaceOwnerId, ownerId))
             .filter(document -> EnumSet.of(DocumentStatus.DRAFT, DocumentStatus.PENDING, DocumentStatus.REJECTED).contains(document.status))
             .filter(document -> document.type == DocumentType.PURCHASE_RETURN || document.type == DocumentType.SALES_OUTBOUND || document.type == DocumentType.STOCK_TRANSFER)
@@ -1435,6 +1945,9 @@ public class ErpStore {
             return;
         }
         settlements.add(record);
+        if (realtimeEnabled()) {
+            realtimeRepository.insertSettlement(record, document);
+        }
     }
 
     private MasterRecord first(String type) {
@@ -1457,21 +1970,58 @@ public class ErpStore {
             .orElseThrow(() -> new BusinessException(displayName(type) + "不存在"));
     }
 
-    private void bindWarehouseStaff(MasterRecord record) {
+    private User validatedWarehouseStaff(MasterRecord record) {
         if (!"warehouse".equals(record.type) || record.warehouseUserId == null) {
+            return null;
+        }
+        var staff = users.get(record.warehouseUserId);
+        if (staff == null
+            || staff.role != RoleCode.WAREHOUSE_STAFF
+            || staff.status != Status.ENABLED
+            || !Objects.equals(workspaceOwnerId(staff.id), record.workspaceOwnerId)) {
+            throw new BusinessException("请选择当前工作区已启用的仓库专员。");
+        }
+        return staff;
+    }
+
+    private void bindWarehouseStaff(MasterRecord record, User staff) {
+        if (!"warehouse".equals(record.type)) {
             return;
         }
-        userById(record.warehouseUserId).warehouseId = record.id;
+        users.values().stream()
+            .filter(user -> Objects.equals(user.workspaceOwnerId, record.workspaceOwnerId))
+            .filter(user -> Objects.equals(user.warehouseId, record.id))
+            .forEach(user -> user.warehouseId = null);
+        if (staff == null) {
+            return;
+        }
+        master.values().stream()
+            .filter(existing -> "warehouse".equals(existing.type))
+            .filter(existing -> Objects.equals(existing.workspaceOwnerId, record.workspaceOwnerId))
+            .filter(existing -> !existing.id.equals(record.id))
+            .filter(existing -> Objects.equals(existing.warehouseUserId, staff.id))
+            .forEach(existing -> existing.warehouseUserId = null);
+        staff.warehouseId = record.id;
     }
 
     private String nextMasterCode(String type, Map<String, String> payload) {
         return switch (type) {
+            case "brand" -> simpleMasterCode("PP", type);
+            case "category" -> simpleMasterCode("FL", type);
+            case "unit" -> simpleMasterCode("DW", type);
             case "warehouse" -> "CK%03d".formatted(warehouseSeq++);
             case "customer" -> "KH%03d".formatted(customerSeq++);
             case "supplier" -> "GYS%03d".formatted(supplierSeq++);
             case "product" -> productCode(payload.get("categoryName"), payload.get("brandName"), productSeq++);
             default -> null;
         };
+    }
+
+    private String simpleMasterCode(String prefix, String type) {
+        var next = master.values().stream()
+            .filter(record -> record.type.equals(type))
+            .count() + 1;
+        return prefix + "%03d".formatted(next);
     }
 
     private String productCode(String categoryName, String brandName, int seq) {
@@ -1636,6 +2186,75 @@ public class ErpStore {
             .mapToInt(file -> file.score == null ? 0 : file.score)
             .sum();
         rankingHistoryRecords.add(history);
+        if (realtimeEnabled()) {
+            realtimeRepository.insertRankingHistory(history, databaseWorkspaceId(student.id));
+        }
+    }
+
+    private ErpStoreData currentData() {
+        return new ErpStoreData(
+            ids.get(),
+            warehouseSeq,
+            customerSeq,
+            supplierSeq,
+            productSeq,
+            documentSeq,
+            settlementSeq,
+            new ArrayList<>(users.values()),
+            new ArrayList<>(master.values()),
+            new ArrayList<>(documents.values()),
+            new ArrayList<>(bugDefinitions.values()),
+            new ArrayList<>(messages),
+            new ArrayList<>(stocks),
+            new ArrayList<>(settlements),
+            new ArrayList<>(bugReports),
+            new ArrayList<>(competitionFiles),
+            new ArrayList<>(rankingHistoryRecords),
+            new ArrayList<>(studentOperationLogs)
+        );
+    }
+
+    private void restoreFromDatabase(ErpStoreData data) {
+        users.clear();
+        master.clear();
+        documents.clear();
+        bugDefinitions.clear();
+        messages.clear();
+        stocks.clear();
+        settlements.clear();
+        bugReports.clear();
+        competitionFiles.clear();
+        rankingHistoryRecords.clear();
+        studentOperationLogs.clear();
+
+        data.users().forEach(user -> users.put(user.id, user));
+        data.masters().forEach(record -> master.put(record.type + ":" + record.id, record));
+        data.documents().forEach(document -> documents.put(document.id, document));
+        data.bugDefinitions().forEach(definition -> bugDefinitions.put(definition.id, definition));
+        messages.addAll(data.messages());
+        stocks.addAll(data.stocks());
+        settlements.addAll(data.settlements());
+        bugReports.addAll(data.bugReports());
+        competitionFiles.addAll(data.competitionFiles());
+        rankingHistoryRecords.addAll(data.rankingHistoryRecords());
+        studentOperationLogs.addAll(data.studentOperationLogs());
+
+        ids.set(Math.max(1000, data.maxId()));
+        warehouseSeq = Math.max(1, data.warehouseSeq());
+        customerSeq = Math.max(1, data.customerSeq());
+        supplierSeq = Math.max(1, data.supplierSeq());
+        productSeq = Math.max(1, data.productSeq());
+        documentSeq = Math.max(1, data.documentSeq());
+        settlementSeq = Math.max(1, data.settlementSeq());
+        recalcAvailable();
+    }
+
+    private boolean realtimeEnabled() {
+        return realtimeReady && realtimeRepository != null;
+    }
+
+    private long databaseWorkspaceId(Long ownerId) {
+        return ownerId == null ? 1L : ownerId;
     }
 
     private boolean activeBug(String bugId) {
@@ -1662,9 +2281,6 @@ public class ErpStore {
 
     private void requireAdmin(User user) {
         if (user.role == RoleCode.SUPER_ADMIN) {
-            return;
-        }
-        if (user.role == RoleCode.ADMIN && user.workspaceOwnerId == null) {
             return;
         }
         throw new BusinessException("当前角色无缺陷发布权限。");
@@ -1733,7 +2349,7 @@ public class ErpStore {
         if ("brand".equals(type) && !activeBug("BUG-0004")) {
             var duplicate = master.values().stream()
                 .filter(record -> record.type.equals(type))
-                .filter(record -> workspaceVisible(record.workspaceOwnerId, ownerId))
+                .filter(record -> Objects.equals(record.workspaceOwnerId, ownerId))
                 .filter(record -> currentId == null || !record.id.equals(currentId))
                 .anyMatch(record -> record.name.equals(name));
             if (duplicate) {

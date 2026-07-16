@@ -42,6 +42,7 @@ async function submit() {
   }
   loading.value = true
   try {
+    auth.savePrimaryStudentSession()
     const data = await loginApi({ username: targetUsername.value, password: form.password })
     if (data.user.role === 'STUDENT' || !data.user.username.startsWith(`${studentUsername.value}_`)) {
       ElMessage.error('只能登录当前学员的 ERP 子账号')

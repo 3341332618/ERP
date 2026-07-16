@@ -20,7 +20,9 @@ import java.lang.annotation.Target;
         + "org.springframework.boot.autoconfigure.jdbc.DataSourceTransactionManagerAutoConfiguration,"
         + "org.springframework.boot.autoconfigure.jdbc.JdbcTemplateAutoConfiguration,"
         + "org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration,"
-        + "org.springframework.boot.autoconfigure.flyway.FlywayAutoConfiguration"
+        + "org.springframework.boot.autoconfigure.flyway.FlywayAutoConfiguration,"
+        + "org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration",
+    "erp.persistence.jdbc.enabled=false"
 })
 @DirtiesContext(classMode = DirtiesContext.ClassMode.BEFORE_EACH_TEST_METHOD)
 public @interface InMemoryBusinessTest {

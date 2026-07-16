@@ -4,6 +4,10 @@ server:
 spring:
   application:
     name: erp-backend
+  autoconfigure:
+    exclude: org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration
+  config:
+    import: optional:file:../.env[.properties],optional:file:.env[.properties]
   profiles:
     default: local
   datasource:
@@ -20,6 +24,7 @@ spring:
           time_zone: Asia/Shanghai
   flyway:
     enabled: true
+    baseline-on-migrate: true
 
 erp:
   jwt-secret: "ERP-CORE-LOOP-DEVELOPMENT-SECRET-CHANGE-IN-PRODUCTION-2026"

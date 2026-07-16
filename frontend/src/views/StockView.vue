@@ -1,18 +1,23 @@
 <template>
   <div class="page">
     <div class="table-panel">
-      <div class="toolbar">
-        <el-input v-model="keyword" placeholder="请输入商品编号/名称查询" clearable style="width: 240px" />
+      <div class="toolbar query-toolbar">
+        <el-input v-model="query.keyword" placeholder="综合查询：任意字段" clearable style="width: 220px" />
+        <el-input v-model="query.productCode" placeholder="请输入商品编号" clearable style="width: 180px" />
+        <el-input v-model="query.productName" placeholder="请输入商品名称" clearable style="width: 180px" />
+        <el-input v-model="query.unitName" placeholder="请输入商品单位" clearable style="width: 170px" />
+        <span class="query-break" aria-hidden="true"></span>
         <span class="filter-label">商品分类</span>
-        <el-select v-model="categoryName" placeholder="请选择" clearable style="width: 240px">
+        <el-select v-model="query.categoryName" placeholder="请选择" clearable style="width: 180px">
           <el-option v-for="item in categoryOptions" :key="item" :label="item" :value="item" />
         </el-select>
         <span class="filter-label">商品品牌</span>
-        <el-select v-model="brandName" placeholder="请选择" clearable style="width: 240px">
+        <el-select v-model="query.brandName" placeholder="请选择" clearable style="width: 180px">
           <el-option v-for="item in brandOptions" :key="item" :label="item" :value="item" />
         </el-select>
+        <el-input v-model="query.warehouseName" placeholder="请输入仓库" clearable style="width: 180px" />
       </div>
-      <div class="toolbar">
+      <div class="toolbar query-actions">
         <el-button type="primary" @click="load">查询</el-button>
         <el-button @click="reset">重置</el-button>
       </div>
@@ -73,13 +78,19 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { listStock } from '../api'
 
 const rows = ref<any[]>([])
-const keyword = ref('')
-const categoryName = ref('')
-const brandName = ref('')
+const query = reactive({
+  keyword: '',
+  productCode: '',
+  productName: '',
+  categoryName: '',
+  brandName: '',
+  unitName: '',
+  warehouseName: ''
+})
 const currentPage = ref(1)
 const pageSize = ref(10)
 const detailVisible = ref(false)
@@ -88,11 +99,14 @@ const current = ref<any>()
 const categoryOptions = computed(() => [...new Set(rows.value.map((row) => row.categoryName).filter(Boolean))])
 const brandOptions = computed(() => [...new Set(rows.value.map((row) => row.brandName).filter(Boolean))])
 const filteredRows = computed(() => rows.value.filter((row) => {
-  const matchKeyword = !keyword.value || [row.productCode, row.productName]
-    .some((value) => String(value || '').includes(keyword.value))
-  const matchCategory = !categoryName.value || row.categoryName === categoryName.value
-  const matchBrand = !brandName.value || row.brandName === brandName.value
-  return matchKeyword && matchCategory && matchBrand
+  const matchKeyword = matchRecordByKeyword(row, query.keyword)
+  const matchProductCode = matchesText(row.productCode, query.productCode)
+  const matchProductName = matchesText(row.productName, query.productName)
+  const matchCategory = !query.categoryName || row.categoryName === query.categoryName
+  const matchBrand = !query.brandName || row.brandName === query.brandName
+  const matchUnit = matchesText(row.unitName, query.unitName)
+  const matchWarehouse = matchesText(row.warehouseName, query.warehouseName)
+  return matchKeyword && matchProductCode && matchProductName && matchCategory && matchBrand && matchUnit && matchWarehouse
 }))
 const pagedRows = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value
@@ -105,10 +119,33 @@ async function load() {
 }
 
 function reset() {
-  keyword.value = ''
-  categoryName.value = ''
-  brandName.value = ''
+  query.keyword = ''
+  query.productCode = ''
+  query.productName = ''
+  query.categoryName = ''
+  query.brandName = ''
+  query.unitName = ''
+  query.warehouseName = ''
   load()
+}
+
+function collectRecordValues(value: any): string[] {
+  if (value === null || value === undefined) return []
+  if (Array.isArray(value)) return value.flatMap((item) => collectRecordValues(item))
+  if (typeof value === 'object') return Object.values(value).flatMap((item) => collectRecordValues(item))
+  return [String(value)]
+}
+
+function matchesText(value: any, keywordValue: string) {
+  const trimmed = keywordValue.trim().toLowerCase()
+  if (!trimmed) return true
+  return String(value ?? '').toLowerCase().includes(trimmed)
+}
+
+function matchRecordByKeyword(row: any, keywordValue: string) {
+  const trimmed = keywordValue.trim().toLowerCase()
+  if (!trimmed) return true
+  return collectRecordValues(row).some((value) => value.toLowerCase().includes(trimmed))
 }
 
 function viewWarehouse(row: any) {
@@ -117,7 +154,16 @@ function viewWarehouse(row: any) {
 }
 
 onMounted(load)
-watch([keyword, categoryName, brandName, pageSize], () => {
+watch([
+  () => query.keyword,
+  () => query.productCode,
+  () => query.productName,
+  () => query.categoryName,
+  () => query.brandName,
+  () => query.unitName,
+  () => query.warehouseName,
+  pageSize
+], () => {
   currentPage.value = 1
 })
 </script>

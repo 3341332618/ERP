@@ -100,8 +100,12 @@
             </template>
           </el-table-column>
           <el-table-column prop="createTime" label="创建时间" min-width="170" />
-          <el-table-column label="操作" width="110" fixed="right">
+          <el-table-column label="操作" width="220" fixed="right">
             <template #default="{ row }">
+              <el-button text type="primary" @click="resetPassword(row)">
+                <el-icon><Key /></el-icon>
+                重置密码
+              </el-button>
               <el-button text type="danger" @click="removeStudent(row)">删除学员</el-button>
             </template>
           </el-table-column>
@@ -319,7 +323,7 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { EditPen, Plus, Refresh, UploadFilled } from '@element-plus/icons-vue'
+import { EditPen, Key, Plus, Refresh, UploadFilled } from '@element-plus/icons-vue'
 import {
   createStudent,
   deleteStudent,
@@ -331,6 +335,7 @@ import {
   listStudentOperationLogs,
   listStudents,
   publishBug,
+  resetStudentPassword,
   reviewBugReport,
   reviewCompetitionFile,
   submitBugReport,
@@ -531,6 +536,25 @@ async function saveStudent() {
   ElMessage.success('新增学员成功')
   studentDialogVisible.value = false
   await load()
+}
+
+async function resetPassword(row: StudentAccount) {
+  try {
+    await ElMessageBox.confirm(
+      `确认将学员 ${row.name} 的主账号及全部 ERP 子账号密码重置为 123456？`,
+      '重置密码',
+      {
+        confirmButtonText: '确认重置',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    )
+  } catch (action) {
+    if (action === 'cancel' || action === 'close') return
+    throw action
+  }
+  const { resetCount } = await resetStudentPassword(row.id)
+  ElMessage.success(`已重置 ${resetCount} 个账号，密码为 123456`)
 }
 
 async function removeStudent(row: StudentAccount) {

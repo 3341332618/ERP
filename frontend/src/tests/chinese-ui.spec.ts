@@ -61,6 +61,9 @@ describe('中文界面文案', () => {
     expect(api).toContain('updateDocument')
     expect(api).toContain('/masterdata/product/import')
     expect(api).toContain('settlementDetail')
+    expect(api).toContain('documentDetail')
+    expect(api).toContain('listReturnOptions')
+    expect(api).toContain('/return-options')
   })
 
   it('登录态失效时路由返回登录页', () => {
@@ -114,6 +117,101 @@ describe('中文界面文案', () => {
     expect(studentErpLoginView).toContain('startsWith(`${studentUsername.value}_`)')
   })
 
+  it('student ERP role logout restores primary student session', () => {
+    const authStore = readFileSync(join(process.cwd(), 'src/stores/auth.ts'), 'utf8')
+    const appLayout = readFileSync(join(process.cwd(), 'src/layouts/AppLayout.vue'), 'utf8')
+    const studentErpLoginView = readFileSync(join(process.cwd(), 'src/views/StudentErpLoginView.vue'), 'utf8')
+
+    expect(authStore).toContain('ERP_PRIMARY_STUDENT_SESSION')
+    expect(authStore).toContain('savePrimaryStudentSession')
+    expect(authStore).toContain('logoutCurrentIdentity')
+    expect(authStore).toContain('restorePrimaryStudentSession')
+    expect(studentErpLoginView).toContain('auth.savePrimaryStudentSession()')
+    expect(appLayout).toContain('auth.logoutCurrentIdentity()')
+    expect(appLayout).toContain("router.push('/competition/my-reports')")
+  })
+
+  it('platform admin demo login is removed while student workspace admin role remains', () => {
+    const loginView = readFileSync(join(process.cwd(), 'src/views/LoginView.vue'), 'utf8')
+    const studentErpLoginView = readFileSync(join(process.cwd(), 'src/views/StudentErpLoginView.vue'), 'utf8')
+
+    expect(loginView).not.toContain("username: 'admin'")
+    expect(loginView).toContain("username: 'student01'")
+    expect(loginView).toContain("username: 'superadmin'")
+    expect(studentErpLoginView).toContain("suffix: 'admin'")
+  })
+
+  it('student ERP workspace pages provide multi-field query and Element Plus date filtering', () => {
+    const documentView = readFileSync(join(process.cwd(), 'src/views/DocumentView.vue'), 'utf8')
+    const masterDataView = readFileSync(join(process.cwd(), 'src/views/MasterDataView.vue'), 'utf8')
+    const settlementView = readFileSync(join(process.cwd(), 'src/views/SettlementView.vue'), 'utf8')
+    const stockView = readFileSync(join(process.cwd(), 'src/views/StockView.vue'), 'utf8')
+    const auditView = readFileSync(join(process.cwd(), 'src/views/AuditView.vue'), 'utf8')
+
+    expect(documentView).toContain('el-date-picker')
+    expect(documentView).toContain('operationDateRange')
+    expect(documentView).toContain('auditDateRange')
+    expect(documentView).toContain('matchRecordByKeyword')
+    expect(masterDataView).toContain('el-date-picker')
+    expect(masterDataView).toContain('createDateRange')
+    expect(masterDataView).toContain('updateDateRange')
+    expect(masterDataView).toContain('matchRecordByKeyword')
+    expect(settlementView).toContain('el-date-picker')
+    expect(settlementView).toContain('createDateRange')
+    expect(settlementView).toContain('matchRecordByKeyword')
+    expect(stockView).toContain('warehouseName')
+    expect(stockView).toContain('matchRecordByKeyword')
+    expect(auditView).toContain('el-date-picker')
+    expect(auditView).toContain('operationDateRange')
+    expect(auditView).toContain('auditDateRange')
+    expect(auditView).toContain('matchRecordByKeyword')
+  })
+
+  it('student ERP query filters cover every displayed business table field', () => {
+    const documentView = readFileSync(join(process.cwd(), 'src/views/DocumentView.vue'), 'utf8')
+    const masterDataView = readFileSync(join(process.cwd(), 'src/views/MasterDataView.vue'), 'utf8')
+    const settlementView = readFileSync(join(process.cwd(), 'src/views/SettlementView.vue'), 'utf8')
+    const stockView = readFileSync(join(process.cwd(), 'src/views/StockView.vue'), 'utf8')
+    const auditView = readFileSync(join(process.cwd(), 'src/views/AuditView.vue'), 'utf8')
+
+    for (const field of ['documentNo', 'warehouseCode', 'warehouseName', 'targetWarehouseCode', 'targetWarehouseName', 'partnerCode', 'partnerName', 'itemCount', 'totalAmount', 'relatedDocumentNo', 'creatorName']) {
+      expect(documentView).toContain(`query.${field}`)
+    }
+    for (const field of ['code', 'name', 'categoryName', 'brandName', 'unitName', 'purchasePrice', 'salePrice', 'phone', 'address', 'status']) {
+      expect(masterDataView).toContain(`query.${field}`)
+    }
+    for (const field of ['settlementNo', 'documentType', 'amount', 'relatedDocumentNo']) {
+      expect(settlementView).toContain(`query.${field}`)
+    }
+    for (const field of ['productCode', 'productName', 'categoryName', 'brandName', 'unitName', 'warehouseName']) {
+      expect(stockView).toContain(`query.${field}`)
+    }
+    for (const field of ['documentNo', 'warehouseCode', 'warehouseName', 'businessType', 'itemCount', 'creatorName', 'auditorName', 'status']) {
+      expect(auditView).toContain(`query.${field}`)
+    }
+  })
+  it('student ERP query filters are grouped across multiple toolbar rows', () => {
+    const styles = readFileSync(join(process.cwd(), 'src/styles.css'), 'utf8')
+    const documentView = readFileSync(join(process.cwd(), 'src/views/DocumentView.vue'), 'utf8')
+    const masterDataView = readFileSync(join(process.cwd(), 'src/views/MasterDataView.vue'), 'utf8')
+    const settlementView = readFileSync(join(process.cwd(), 'src/views/SettlementView.vue'), 'utf8')
+    const stockView = readFileSync(join(process.cwd(), 'src/views/StockView.vue'), 'utf8')
+    const auditView = readFileSync(join(process.cwd(), 'src/views/AuditView.vue'), 'utf8')
+
+    for (const content of [documentView, masterDataView, settlementView, stockView, auditView]) {
+      expect(content).toContain('toolbar query-toolbar')
+    }
+    expect(documentView.match(/class="query-break"/g)?.length ?? 0).toBeGreaterThanOrEqual(2)
+    expect(masterDataView.match(/class="query-break"/g)?.length ?? 0).toBeGreaterThanOrEqual(3)
+    expect(settlementView.match(/class="query-break"/g)?.length ?? 0).toBeGreaterThanOrEqual(2)
+    expect(auditView.match(/class="query-break"/g)?.length ?? 0).toBeGreaterThanOrEqual(2)
+    expect(stockView.match(/class="query-break"/g)?.length ?? 0).toBeGreaterThanOrEqual(1)
+    expect(stockView).toContain('toolbar query-actions')
+    expect(styles).toContain('.toolbar.query-toolbar')
+    expect(styles).toContain('.query-break')
+    expect(styles).toContain('flex-basis: 100%')
+  })
+
   it('库存调拨路由使用库存调拨单配置', () => {
     const router = readFileSync(join(process.cwd(), 'src/router/index.ts'), 'utf8')
     const documentView = readFileSync(join(process.cwd(), 'src/views/DocumentView.vue'), 'utf8')
@@ -126,6 +224,41 @@ describe('中文界面文案', () => {
     expect(documentView).toContain('待调拨')
     expect(documentView).toContain('已调拨')
     expect(documentView).toContain('无法调拨')
+  })
+
+  it('主数据新增使用已有业务选项并提供详情查看', () => {
+    const masterDataView = readFileSync(join(process.cwd(), 'src/views/MasterDataView.vue'), 'utf8')
+
+    expect(masterDataView).toContain('productReferenceOptions.category')
+    expect(masterDataView).toContain('productReferenceOptions.brand')
+    expect(masterDataView).toContain('productReferenceOptions.unit')
+    expect(masterDataView).toContain('filterable')
+    expect(masterDataView).not.toContain('allow-create')
+    expect(masterDataView).toContain('el-input-number')
+    expect(masterDataView).toContain('formRef.value?.validate()')
+    expect(masterDataView).toContain('openDetail')
+    expect(masterDataView).toContain('detailVisible')
+    expect(masterDataView).toContain('el-descriptions')
+  })
+
+  it('单据新增按业务关系加载下拉并支持查看原单', () => {
+    const documentView = readFileSync(join(process.cwd(), 'src/views/DocumentView.vue'), 'utf8')
+
+    expect(documentView).toContain('associationOptions.warehouses')
+    expect(documentView).toContain('associationOptions.partners')
+    expect(documentView).toContain('selectableProducts')
+    expect(documentView).toContain('returnOptions')
+    expect(documentView).toContain('listReturnOptions')
+    expect(documentView).toContain('documentDetail')
+    expect(documentView).toContain('stockProductOptions')
+    expect(documentView).toContain('transferTargetOptions')
+    expect(documentView).toContain('handleWarehouseChange')
+    expect(documentView).toContain('handleReturnSourceChange')
+    expect(documentView).toContain('formRef.value?.validate()')
+    expect(documentView).toContain('el-input-number')
+    expect(documentView).toContain('openSourceDetail')
+    expect(documentView).toContain('sourceDetailVisible')
+    expect(documentView).not.toContain('allow-create')
   })
 
   it('退货单据表单要求关联原始单据', () => {
@@ -207,5 +340,18 @@ describe('中文界面文案', () => {
     expect(competitionView).toContain('进入我的 ERP 工作区')
     expect(competitionView).toContain('竞赛排行榜')
     expect(competitionView).toContain('测试学员')
+  })
+  it('学员管理支持将主账号及全部 ERP 子账号密码重置为 123456', () => {
+    const api = readFileSync(join(process.cwd(), 'src/api/index.ts'), 'utf8')
+    const competitionView = readFileSync(join(process.cwd(), 'src/views/CompetitionView.vue'), 'utf8')
+
+    expect(api).toContain('resetStudentPassword')
+    expect(api).toContain('/reset-password')
+    expect(competitionView).toContain('<Key />')
+    expect(competitionView).toContain('重置密码')
+    expect(competitionView).toContain('主账号及全部 ERP 子账号')
+    expect(competitionView).toContain('123456')
+    expect(competitionView).toContain('resetCount')
+    expect(competitionView).toContain("action === 'cancel' || action === 'close'")
   })
 })

@@ -29,6 +29,42 @@ body {
   flex-wrap: wrap;
 }
 
+.toolbar.query-toolbar {
+  align-items: flex-start;
+  gap: 10px 12px;
+  padding: 12px;
+  background: #f8fbff;
+  border: 1px solid #e5eef8;
+  border-radius: 4px;
+}
+
+.toolbar.query-actions {
+  margin-top: -4px;
+}
+
+.query-break {
+  flex-basis: 100%;
+  width: 0;
+  height: 0;
+}
+
+@media (max-width: 768px) {
+  .toolbar.query-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .toolbar.query-toolbar .el-input,
+  .toolbar.query-toolbar .el-select,
+  .toolbar.query-toolbar .el-date-editor {
+    width: 100% !important;
+  }
+
+  .query-break {
+    display: none;
+  }
+}
+
 .table-panel {
   background: #fff;
   border: 1px solid #e8edf3;

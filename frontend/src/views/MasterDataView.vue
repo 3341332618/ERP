@@ -1,18 +1,46 @@
 <template>
   <div class="page">
     <div class="table-panel">
-      <div class="toolbar">
-        <el-input v-model="query.keyword" :placeholder="`请输入${config.name}编号/名称查询`" clearable style="width: 260px" />
-        <template v-if="type === 'product'">
-          <span class="filter-label">商品分类</span>
-          <el-input v-model="query.categoryName" placeholder="请输入商品分类" clearable style="width: 170px" />
-          <span class="filter-label">商品品牌</span>
-          <el-input v-model="query.brandName" placeholder="请输入商品品牌" clearable style="width: 170px" />
-        </template>
+      <div class="toolbar query-toolbar">
+        <el-input v-model="query.keyword" placeholder="综合查询：任意字段" clearable style="width: 220px" />
+        <el-input v-model="query.code" :placeholder="`请输入${config.name}编号`" clearable style="width: 180px" />
+        <el-input v-model="query.name" :placeholder="`请输入${config.name}名称`" clearable style="width: 180px" />
         <el-select v-model="query.status" placeholder="请选择状态" clearable style="width: 150px">
           <el-option label="启用" value="ENABLED" />
           <el-option label="禁用" value="DISABLED" />
         </el-select>
+        <span class="query-break" aria-hidden="true"></span>
+        <template v-if="type === 'product'">
+          <el-input v-model="query.categoryName" placeholder="请输入商品分类" clearable style="width: 170px" />
+          <el-input v-model="query.brandName" placeholder="请输入商品品牌" clearable style="width: 170px" />
+          <el-input v-model="query.unitName" placeholder="请输入商品单位" clearable style="width: 170px" />
+          <el-input v-model="query.purchasePrice" placeholder="请输入建议采购价" clearable style="width: 170px" />
+          <el-input v-model="query.salePrice" placeholder="请输入建议零售价" clearable style="width: 170px" />
+        </template>
+        <template v-else>
+          <el-input v-model="query.phone" placeholder="请输入联系电话" clearable style="width: 170px" />
+          <el-input v-model="query.address" placeholder="请输入地址" clearable style="width: 220px" />
+        </template>
+        <span class="query-break" aria-hidden="true"></span>
+        <el-date-picker
+          v-model="query.createDateRange"
+          type="daterange"
+          value-format="YYYY-MM-DD"
+          start-placeholder="创建开始日期"
+          end-placeholder="创建结束日期"
+          range-separator="至"
+          style="width: 250px"
+        />
+        <el-date-picker
+          v-model="query.updateDateRange"
+          type="daterange"
+          value-format="YYYY-MM-DD"
+          start-placeholder="更新开始日期"
+          end-placeholder="更新结束日期"
+          range-separator="至"
+          style="width: 250px"
+        />
+        <span class="query-break" aria-hidden="true"></span>
         <el-button type="primary" @click="load">查询</el-button>
         <el-button @click="reset">重置</el-button>
         <el-button type="primary" plain @click="openCreate">+ 新增</el-button>
@@ -48,8 +76,12 @@
             <el-tag :type="row.status === 'ENABLED' ? 'success' : 'info'">{{ row.status === 'ENABLED' ? '启用' : '禁用' }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="180">
+        <el-table-column label="操作" width="240" fixed="right">
           <template #default="{ row }">
+            <el-button text type="primary" @click="openDetail(row)">
+              <el-icon><View /></el-icon>
+              详情
+            </el-button>
             <el-button text type="primary" @click="openEdit(row)">修改</el-button>
             <el-button text type="warning" @click="toggle(row)">{{ row.status === 'ENABLED' ? '禁用' : '启用' }}</el-button>
           </template>
@@ -69,14 +101,48 @@
     </div>
 
     <el-dialog v-model="dialogVisible" :title="dialogTitle" width="520px">
-      <el-form :model="form" :rules="formRules" label-width="120px">
+      <el-form ref="formRef" :model="form" :rules="formRules" label-width="120px">
         <el-form-item :label="`${config.name}名称`" prop="name"><el-input v-model="form.name" :placeholder="`请输入${config.name}名称`" /></el-form-item>
         <template v-if="type === 'product'">
-          <el-form-item label="商品分类" prop="categoryName"><el-input v-model="form.categoryName" placeholder="请输入商品分类" /></el-form-item>
-          <el-form-item label="商品品牌" prop="brandName"><el-input v-model="form.brandName" placeholder="请输入商品品牌" /></el-form-item>
-          <el-form-item label="商品单位" prop="unitName"><el-input v-model="form.unitName" placeholder="请输入商品单位" /></el-form-item>
-          <el-form-item label="建议采购价（元）" prop="purchasePrice"><el-input v-model="form.purchasePrice" placeholder="请输入建议采购价（元）" /></el-form-item>
-          <el-form-item label="建议零售价（元）" prop="salePrice"><el-input v-model="form.salePrice" placeholder="请输入建议零售价（元）" /></el-form-item>
+          <el-form-item label="商品分类" prop="categoryName">
+            <el-select v-model="form.categoryName" filterable placeholder="请选择商品分类" style="width: 100%">
+              <el-option
+                v-for="option in productReferenceOptions.category"
+                :key="option.id"
+                :label="referenceOptionLabel(option)"
+                :value="option.name"
+                :disabled="option.status !== 'ENABLED'"
+              />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="商品品牌" prop="brandName">
+            <el-select v-model="form.brandName" filterable placeholder="请选择商品品牌" style="width: 100%">
+              <el-option
+                v-for="option in productReferenceOptions.brand"
+                :key="option.id"
+                :label="referenceOptionLabel(option)"
+                :value="option.name"
+                :disabled="option.status !== 'ENABLED'"
+              />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="商品单位" prop="unitName">
+            <el-select v-model="form.unitName" filterable placeholder="请选择商品单位" style="width: 100%">
+              <el-option
+                v-for="option in productReferenceOptions.unit"
+                :key="option.id"
+                :label="referenceOptionLabel(option)"
+                :value="option.name"
+                :disabled="option.status !== 'ENABLED'"
+              />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="建议采购价（元）" prop="purchasePrice">
+            <el-input-number v-model="form.purchasePrice" :min="0" :precision="2" :step="1" controls-position="right" style="width: 100%" />
+          </el-form-item>
+          <el-form-item label="建议零售价（元）" prop="salePrice">
+            <el-input-number v-model="form.salePrice" :min="0" :precision="2" :step="1" controls-position="right" style="width: 100%" />
+          </el-form-item>
           <el-form-item label="商品图片">
             <div class="image-upload-box image-upload-box-large">
               <el-upload
@@ -108,6 +174,49 @@
           <el-button @click="dialogVisible = false">取消</el-button>
           <el-button type="primary" @click="save">保存</el-button>
         </div>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="detailVisible" :title="`${config.name}详情`" width="680px">
+      <div v-if="detailRow" class="master-detail">
+        <div class="master-detail-header">
+          <el-image
+            v-if="type === 'product' && detailRow.imageData"
+            :src="detailRow.imageData"
+            class="master-detail-image"
+            fit="cover"
+            :preview-src-list="[detailRow.imageData]"
+            preview-teleported
+          />
+          <div class="master-detail-heading">
+            <strong>{{ detailRow.name }}</strong>
+            <span>{{ detailRow.code || '暂无编号' }}</span>
+          </div>
+          <el-tag :type="detailRow.status === 'ENABLED' ? 'success' : 'info'">
+            {{ detailRow.status === 'ENABLED' ? '启用' : '禁用' }}
+          </el-tag>
+        </div>
+        <el-descriptions :column="2" border>
+          <el-descriptions-item label="编号">{{ detailRow.code || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="`${config.name}名称`">{{ detailRow.name }}</el-descriptions-item>
+          <template v-if="type === 'product'">
+            <el-descriptions-item label="商品分类">{{ detailRow.categoryName || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="商品品牌">{{ detailRow.brandName || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="商品单位">{{ detailRow.unitName || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="建议采购价">{{ formatMoney(detailRow.purchasePrice) }}</el-descriptions-item>
+            <el-descriptions-item label="建议零售价">{{ formatMoney(detailRow.salePrice) }}</el-descriptions-item>
+          </template>
+          <template v-if="['warehouse', 'customer', 'supplier'].includes(type)">
+            <el-descriptions-item label="联系人">{{ detailRow.contact || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="联系电话">{{ detailRow.phone || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="地址" :span="2">{{ detailRow.address || '-' }}</el-descriptions-item>
+          </template>
+          <el-descriptions-item label="创建时间">{{ formatDateTime(detailRow.createTime) }}</el-descriptions-item>
+          <el-descriptions-item label="更新时间">{{ formatDateTime(detailRow.updateTime) }}</el-descriptions-item>
+        </el-descriptions>
+      </div>
+      <template #footer>
+        <el-button type="primary" @click="detailVisible = false">关闭</el-button>
       </template>
     </el-dialog>
 
@@ -148,21 +257,80 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import type { FormRules, UploadFile } from 'element-plus'
-import { Plus, UploadFilled } from '@element-plus/icons-vue'
-import { changeMasterStatus, createMaster, importProducts, listMaster, updateMaster } from '../api'
+import type { FormInstance, FormRules, UploadFile } from 'element-plus'
+import { Plus, UploadFilled, View } from '@element-plus/icons-vue'
+import {
+  changeMasterStatus,
+  createMaster,
+  importProducts,
+  listMaster,
+  updateMaster,
+  type MasterRecord
+} from '../api'
+import { dedupeMasterOptions } from '../utils/businessOptions'
 import { readValidDocumentImage } from '../utils/imageUpload'
 
+interface MasterForm {
+  name: string
+  categoryName: string
+  brandName: string
+  unitName: string
+  purchasePrice?: number
+  salePrice?: number
+  imageData: string
+  contact: string
+  phone: string
+  address: string
+  [key: string]: string | number | undefined
+}
+
+function emptyMasterForm(): MasterForm {
+  return {
+    name: '',
+    categoryName: '',
+    brandName: '',
+    unitName: '',
+    purchasePrice: undefined,
+    salePrice: undefined,
+    imageData: '',
+    contact: '',
+    phone: '',
+    address: ''
+  }
+}
+
 const route = useRoute()
-const rows = ref<any[]>([])
+const rows = ref<MasterRecord[]>([])
 const dialogVisible = ref(false)
+const detailVisible = ref(false)
+const detailRow = ref<MasterRecord | null>(null)
 const importVisible = ref(false)
 const editingId = ref<number | null>(null)
-const query = reactive({ keyword: '', status: '', categoryName: '', brandName: '' })
-const form = reactive<Record<string, string>>({})
+const formRef = ref<FormInstance>()
+const productReferenceOptions = reactive({
+  category: [] as MasterRecord[],
+  brand: [] as MasterRecord[],
+  unit: [] as MasterRecord[]
+})
+const query = reactive({
+  keyword: '',
+  code: '',
+  name: '',
+  status: '',
+  categoryName: '',
+  brandName: '',
+  unitName: '',
+  purchasePrice: '',
+  salePrice: '',
+  phone: '',
+  address: '',
+  createDateRange: [] as string[],
+  updateDateRange: [] as string[]
+})
+const form = reactive<MasterForm>(emptyMasterForm())
 const importText = ref('')
 const currentPage = ref(1)
 const pageSize = ref(10)
@@ -182,9 +350,30 @@ const config = computed(() => configs[type.value] || { name: '资料' })
 const dialogTitle = computed(() => `${editingId.value ? '修改' : '新增'}${config.value.name}`)
 const formRules = computed<FormRules>(() => ({
   name: [{ required: true, message: `${config.value.name}名称必填，请重新输入。`, trigger: 'blur' }],
-  categoryName: [{ required: type.value === 'product', message: '商品分类必填，请重新输入。', trigger: 'blur' }],
-  brandName: [{ required: type.value === 'product', message: '商品品牌必填，请重新输入。', trigger: 'blur' }],
-  unitName: [{ required: type.value === 'product', message: '商品单位必填，请重新输入。', trigger: 'blur' }],
+  categoryName: [
+    { required: type.value === 'product', message: '商品分类必填，请重新输入。', trigger: 'change' },
+    {
+      validator: (_rule: unknown, value: unknown, callback: (error?: Error) => void) =>
+        validateEnabledReference(productReferenceOptions.category, value, '商品分类', callback),
+      trigger: 'change'
+    }
+  ],
+  brandName: [
+    { required: type.value === 'product', message: '商品品牌必填，请重新输入。', trigger: 'change' },
+    {
+      validator: (_rule: unknown, value: unknown, callback: (error?: Error) => void) =>
+        validateEnabledReference(productReferenceOptions.brand, value, '商品品牌', callback),
+      trigger: 'change'
+    }
+  ],
+  unitName: [
+    { required: type.value === 'product', message: '商品单位必填，请重新输入。', trigger: 'change' },
+    {
+      validator: (_rule: unknown, value: unknown, callback: (error?: Error) => void) =>
+        validateEnabledReference(productReferenceOptions.unit, value, '商品单位', callback),
+      trigger: 'change'
+    }
+  ],
   purchasePrice: [{ required: type.value === 'product', message: '建议采购价必填，请重新输入。', trigger: 'blur' }],
   salePrice: [{ required: type.value === 'product', message: '建议零售价必填，请重新输入。', trigger: 'blur' }],
   contact: [{ required: ['warehouse', 'customer', 'supplier'].includes(type.value), message: '联系人必填，请重新输入。', trigger: 'blur' }],
@@ -192,9 +381,20 @@ const formRules = computed<FormRules>(() => ({
   address: [{ required: ['warehouse', 'customer', 'supplier'].includes(type.value), message: '地址必填，请重新输入。', trigger: 'blur' }]
 }))
 const filteredRows = computed(() => rows.value.filter((row) => {
-  const matchCategory = type.value !== 'product' || !query.categoryName || String(row.categoryName || '').includes(query.categoryName)
-  const matchBrand = type.value !== 'product' || !query.brandName || String(row.brandName || '').includes(query.brandName)
-  return matchCategory && matchBrand
+  const matchKeyword = matchRecordByKeyword(row, query.keyword)
+  const matchCode = matchesText(row.code, query.code)
+  const matchName = matchesText(row.name, query.name)
+  const matchStatus = !query.status || row.status === query.status
+  const matchCategory = type.value !== 'product' || matchesText(row.categoryName, query.categoryName)
+  const matchBrand = type.value !== 'product' || matchesText(row.brandName, query.brandName)
+  const matchUnit = type.value !== 'product' || matchesText(row.unitName, query.unitName)
+  const matchPurchasePrice = type.value !== 'product' || matchesText(row.purchasePrice, query.purchasePrice)
+  const matchSalePrice = type.value !== 'product' || matchesText(row.salePrice, query.salePrice)
+  const matchPhone = type.value === 'product' || matchesText(row.phone, query.phone)
+  const matchAddress = type.value === 'product' || matchesText(row.address, query.address)
+  const matchCreateDate = inDateRange(row.createTime, query.createDateRange)
+  const matchUpdateDate = inDateRange(row.updateTime, query.updateDateRange)
+  return matchKeyword && matchCode && matchName && matchStatus && matchCategory && matchBrand && matchUnit && matchPurchasePrice && matchSalePrice && matchPhone && matchAddress && matchCreateDate && matchUpdateDate
 }))
 const pagedRows = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value
@@ -202,34 +402,121 @@ const pagedRows = computed(() => {
 })
 
 async function load() {
-  rows.value = await listMaster(type.value, query)
+  rows.value = await listMaster(type.value, { status: query.status })
   currentPage.value = 1
+}
+
+async function loadProductReferences(selectedProduct?: MasterRecord) {
+  const params: Record<string, string> = selectedProduct ? {} : { status: 'ENABLED' }
+  const [categories, brands, units] = await Promise.all([
+    listMaster('category', params),
+    listMaster('brand', params),
+    listMaster('unit', params)
+  ])
+  productReferenceOptions.category = dedupeMasterOptions(categories, undefined, selectedProduct?.categoryName || undefined)
+  productReferenceOptions.brand = dedupeMasterOptions(brands, undefined, selectedProduct?.brandName || undefined)
+  productReferenceOptions.unit = dedupeMasterOptions(units, undefined, selectedProduct?.unitName || undefined)
 }
 
 function reset() {
   query.keyword = ''
+  query.code = ''
+  query.name = ''
   query.status = ''
   query.categoryName = ''
   query.brandName = ''
+  query.unitName = ''
+  query.purchasePrice = ''
+  query.salePrice = ''
+  query.phone = ''
+  query.address = ''
+  query.createDateRange = []
+  query.updateDateRange = []
   load()
 }
 
-function openCreate() {
-  editingId.value = null
-  Object.keys(form).forEach((key) => delete form[key])
-  if (type.value === 'product') {
-    form.imageData = ''
-  }
-  dialogVisible.value = true
+function collectRecordValues(value: any): string[] {
+  if (value === null || value === undefined) return []
+  if (Array.isArray(value)) return value.flatMap((item) => collectRecordValues(item))
+  if (typeof value === 'object') return Object.values(value).flatMap((item) => collectRecordValues(item))
+  return [String(value)]
 }
 
-function openEdit(row: any) {
-  editingId.value = row.id
-  Object.assign(form, row)
+function matchRecordByKeyword(row: any, keyword: string) {
+  const trimmed = keyword.trim().toLowerCase()
+  if (!trimmed) return true
+  return collectRecordValues(row).some((value) => value.toLowerCase().includes(trimmed))
+}
+
+function matchesText(value: any, keyword: string) {
+  const trimmed = keyword.trim().toLowerCase()
+  if (!trimmed) return true
+  return String(value ?? '').toLowerCase().includes(trimmed)
+}
+
+function inDateRange(value: string | null | undefined, range: string[]) {
+  if (!range?.length || range.length !== 2) return true
+  if (!value) return false
+  const day = value.slice(0, 10)
+  return day >= range[0] && day <= range[1]
+}
+
+function referenceOptionLabel(option: MasterRecord) {
+  const codeLabel = option.code ? `${option.name} · ${option.code}` : option.name
+  return option.status === 'ENABLED' ? codeLabel : `${codeLabel} · 已停用`
+}
+
+function validateEnabledReference(
+  options: MasterRecord[],
+  value: unknown,
+  label: string,
+  callback: (error?: Error) => void
+) {
+  if (type.value !== 'product' || value === null || value === undefined || value === '') return callback()
+  const option = options.find((item) => item.name === String(value))
+  if (!option || option.status !== 'ENABLED') {
+    return callback(new Error(`${label}已停用或不可用，请重新选择。`))
+  }
+  callback()
+}
+
+function formatMoney(value: string | number | null | undefined) {
+  if (value === null || value === undefined || value === '') return '-'
+  return `¥${Number(value).toFixed(2)}`
+}
+
+function formatDateTime(value: string | null | undefined) {
+  return value ? value.replace('T', ' ').slice(0, 19) : '-'
+}
+
+async function openCreate() {
+  editingId.value = null
+  Object.assign(form, emptyMasterForm())
+  if (type.value === 'product') await loadProductReferences()
   dialogVisible.value = true
+  await nextTick()
+  formRef.value?.clearValidate()
+}
+
+async function openEdit(row: MasterRecord) {
+  editingId.value = row.id
+  Object.assign(form, emptyMasterForm(), row, {
+    purchasePrice: row.purchasePrice === null || row.purchasePrice === undefined ? undefined : Number(row.purchasePrice),
+    salePrice: row.salePrice === null || row.salePrice === undefined ? undefined : Number(row.salePrice)
+  })
+  if (type.value === 'product') await loadProductReferences(row)
+  dialogVisible.value = true
+  await nextTick()
+  formRef.value?.clearValidate()
+}
+
+function openDetail(row: MasterRecord) {
+  detailRow.value = row
+  detailVisible.value = true
 }
 
 async function save() {
+  await formRef.value?.validate()
   if (editingId.value) {
     await updateMaster(type.value, editingId.value, form)
   } else {
@@ -250,7 +537,7 @@ function removeProductImage() {
   form.imageData = ''
 }
 
-async function toggle(row: any) {
+async function toggle(row: MasterRecord) {
   const next = row.status === 'ENABLED' ? 'DISABLED' : 'ENABLED'
   await ElMessageBox.confirm(`确认${next === 'ENABLED' ? '启用' : '禁用'}该数据？`, '操作确认', { confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning' })
   await changeMasterStatus(type.value, row.id, next)
@@ -312,7 +599,22 @@ async function saveImport() {
 }
 
 watch(type, load)
-watch([() => query.categoryName, () => query.brandName, pageSize], () => {
+watch([
+  () => query.keyword,
+  () => query.code,
+  () => query.name,
+  () => query.status,
+  () => query.categoryName,
+  () => query.brandName,
+  () => query.unitName,
+  () => query.purchasePrice,
+  () => query.salePrice,
+  () => query.phone,
+  () => query.address,
+  () => query.createDateRange.join('|'),
+  () => query.updateDateRange.join('|'),
+  pageSize
+], () => {
   currentPage.value = 1
 })
 onMounted(load)
@@ -392,6 +694,41 @@ onMounted(load)
   gap: 14px;
   padding-top: 14px;
   color: #606266;
+}
+
+.master-detail {
+  display: grid;
+  gap: 18px;
+}
+
+.master-detail-header {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+}
+
+.master-detail-image {
+  width: 72px;
+  height: 72px;
+  border-radius: 6px;
+}
+
+.master-detail-heading {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.master-detail-heading strong {
+  overflow-wrap: anywhere;
+  color: #1f2d3d;
+  font-size: 18px;
+}
+
+.master-detail-heading span {
+  color: #7b8794;
+  font-size: 13px;
 }
 
 .import-template-link {

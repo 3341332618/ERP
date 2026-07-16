@@ -65,7 +65,7 @@ public final class ErpModels {
     }
 
     public enum RoleCode {
-        ADMIN("系统管理员"),
+        ADMIN("管理员"),
         SUPER_ADMIN("终极管理员"),
         PURCHASE_MANAGER("采购主管"),
         PURCHASE_STAFF("采购专员"),

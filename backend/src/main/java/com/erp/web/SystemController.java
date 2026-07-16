@@ -1,7 +1,7 @@
 package com.erp.web;
 
 import com.erp.common.ApiResult;
-import com.erp.store.ErpStore;
+import com.erp.service.SystemService;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -10,16 +10,14 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/system")
 public class SystemController {
-    private final ErpStore store;
+    private final SystemService systemService;
 
-    public SystemController(ErpStore store) {
-        this.store = store;
+    public SystemController(SystemService systemService) {
+        this.systemService = systemService;
     }
 
     @GetMapping("/messages")
     public ApiResult<?> messages(Authentication authentication) {
-        var user = store.userByUsername(authentication.getName());
-        return ApiResult.success(store.messages(user.id));
+        return ApiResult.success(systemService.messages(authentication.getName()));
     }
 }
-

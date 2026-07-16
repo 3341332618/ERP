@@ -1,15 +1,23 @@
 package com.erp;
 
 import com.erp.support.MySqlIntegrationTest;
+import org.flywaydb.core.Flyway;
+import org.flywaydb.core.api.MigrationVersion;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+
+import javax.sql.DataSource;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 class PersistenceBootstrapTest extends MySqlIntegrationTest {
     @Autowired
     JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    DataSource dataSource;
 
     @Test
     void startsWithMySql() {
@@ -39,6 +47,78 @@ class PersistenceBootstrapTest extends MySqlIntegrationTest {
         );
 
         assertThat(successfulMigrations).isEqualTo(1L);
+    }
+
+    @Test
+    void versionFiveRepairsThePasswordHashColumn() {
+        var versionCount = jdbcTemplate.queryForObject(
+            "select count(*) from flyway_schema_history where version = '5' and success = 1",
+            Long.class
+        );
+        var column = jdbcTemplate.queryForMap("""
+            select data_type, character_maximum_length, is_nullable
+            from information_schema.columns
+            where table_schema = database()
+              and table_name = 'sys_user'
+              and column_name = 'password_hash'
+            """);
+
+        assertThat(versionCount).isEqualTo(1L);
+        assertThat(column.get("data_type")).isEqualTo("varchar");
+        assertThat(((Number) column.get("character_maximum_length")).longValue()).isEqualTo(100L);
+        assertThat(column.get("is_nullable")).isEqualTo("NO");
+    }
+
+    @Test
+    void versionFiveAddsAHashColumnMissingFromAHistoricalSchema() {
+        var historicalFlyway = flywayAtVersionFour();
+        historicalFlyway.clean();
+        historicalFlyway.migrate();
+        jdbcTemplate.execute("alter table sys_user drop column password_hash");
+
+        currentFlyway().migrate();
+
+        var column = jdbcTemplate.queryForMap("""
+            select character_maximum_length, is_nullable
+            from information_schema.columns
+            where table_schema = database()
+              and table_name = 'sys_user'
+              and column_name = 'password_hash'
+            """);
+        assertThat(((Number) column.get("character_maximum_length")).longValue()).isEqualTo(100L);
+        assertThat(column.get("is_nullable")).isEqualTo("NO");
+    }
+
+    @Test
+    void versionFiveBackfillsOnlyBlankHistoricalHashes() {
+        var historicalFlyway = flywayAtVersionFour();
+        historicalFlyway.clean();
+        historicalFlyway.migrate();
+        jdbcTemplate.execute("alter table sys_user modify column password_hash varchar(100) null");
+        jdbcTemplate.update("""
+            insert into erp_workspace (id, code, name, workspace_type, status)
+            values (9001, 'HISTORICAL', '历史工作区', 'SYSTEM', 'ENABLED')
+            """);
+        jdbcTemplate.update("""
+            insert into sys_user
+                (id, workspace_id, username, password_hash, name, phone, role_code, status)
+            values
+                (9001, 9001, 'blank_hash_user', '', '空密码用户', '13800009001', 'STUDENT', 'ENABLED'),
+                (9002, 9001, 'existing_hash_user', 'existing-hash', '已有密码用户', '13800009002', 'STUDENT', 'ENABLED')
+            """);
+
+        currentFlyway().migrate();
+
+        var repairedHash = jdbcTemplate.queryForObject(
+            "select password_hash from sys_user where username = 'blank_hash_user'",
+            String.class
+        );
+        var existingHash = jdbcTemplate.queryForObject(
+            "select password_hash from sys_user where username = 'existing_hash_user'",
+            String.class
+        );
+        assertThat(new BCryptPasswordEncoder().matches("123456", repairedHash)).isTrue();
+        assertThat(existingHash).isEqualTo("existing-hash");
     }
 
     @Test
@@ -126,4 +206,20 @@ class PersistenceBootstrapTest extends MySqlIntegrationTest {
             .hasSize(4)
             .allMatch(rule -> !rule.endsWith(":CASCADE"));
     }
-}
+
+    private Flyway flywayAtVersionFour() {
+        return Flyway.configure()
+            .dataSource(dataSource)
+            .locations("classpath:db/migration")
+            .cleanDisabled(false)
+            .target(MigrationVersion.fromVersion("4"))
+            .load();
+    }
+
+    private Flyway currentFlyway() {
+        return Flyway.configure()
+            .dataSource(dataSource)
+            .locations("classpath:db/migration")
+            .cleanDisabled(false)
+            .load();
+    }}

@@ -21,20 +21,17 @@ class ErpCoreFlowIntegrationTest {
     ErpStore store;
 
     @Test
-    void adminMenuIncludesAllBusinessModules() {
+    void workspaceAdminRoleMenuIncludesOnlyBusinessModules() {
         var adminMenus = store.menus(RoleCode.ADMIN);
 
         assertThat(adminMenus)
             .extracting(menu -> menu.title)
-            .containsExactly("基础信息管理", "采购管理", "库存管理", "销售管理", "结算管理", "测试竞赛管理")
+            .containsExactly("基础信息管理", "采购管理", "库存管理", "销售管理", "结算管理")
             .doesNotContain("个人中心");
         assertThat(adminMenus.stream()
-            .filter(menu -> "测试竞赛管理".equals(menu.title))
-            .findFirst()
-            .orElseThrow()
-            .children)
-            .extracting(menu -> menu.title)
-            .contains("缺陷库发布", "学员管理", "学员报告评分", "竞赛排行榜");
+            .flatMap(menu -> menu.children.stream())
+            .map(menu -> menu.path))
+            .noneMatch(path -> path.startsWith("/competition"));
         assertThat(adminMenus.stream()
             .filter(menu -> "库存管理".equals(menu.title))
             .findFirst()
@@ -60,7 +57,7 @@ class ErpCoreFlowIntegrationTest {
 
     @Test
     void profileAvatarCanBeUploadedAndProductImageFollowsDocumentUploadRule() {
-        var admin = store.userByUsername("admin");
+        var admin = store.userByUsername("student01_admin");
         var pngData = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=";
 
         store.updateAvatar(admin.id, pngData);

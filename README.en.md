@@ -2,7 +2,7 @@
 
 Language: [中文](./README.md) | English
 
-A full-stack ERP demo system built with Spring Boot 3 and Vue 3. It covers purchasing, sales, inventory, settlement, and a software-testing training module where administrators can publish controlled defects while students discover issues independently.
+A full-stack ERP demo system built with Spring Boot 3 and Vue 3. It covers purchasing, sales, inventory, settlement, and a software-testing training module where the super administrator can publish controlled defects while students discover issues independently.
 
 This project is suitable for coursework, training labs, ERP process demos, and full-stack development practice. The repository includes Docker Compose + MySQL 8.4 + Flyway schema scripts for local startup, schema verification, and deployment demos.
 
@@ -60,6 +60,7 @@ Backend:
 - Java 17
 - Spring Boot 3.3.6
 - Spring Web / Spring Security / Spring Data JPA
+- MyBatis-Plus 3.5.x
 - Flyway
 - MySQL Connector/J
 - JJWT
@@ -80,9 +81,24 @@ Frontend:
 Database:
 
 - MySQL 8.4
-- Local default: `127.0.0.1:3307/erp`
-- Schema migration: `backend/src/main/resources/db/migration/V1__create_schema.sql`
-- Demo data is initialized by the backend service for repeatable coursework, defect toggles, and testing scenarios.
+- Local default: `127.0.0.1:3306/erp`
+- Schema migrations: `backend/src/main/resources/db/migration/V1__create_schema.sql` and later Flyway migrations. `V4__remove_platform_admin.sql` renames and disables the historical platform `admin` account; platform competition management now uses `superadmin`.
+- Business data is persisted with real-time MySQL writes. On startup the backend loads current rows with `SELECT`; during runtime each business action writes the related tables immediately with targeted `INSERT` / `UPDATE` / `DELETE`. It is not a whole-state snapshot save/load design.
+- Demo data is seeded only when the business tables are empty. If MySQL already contains users/workspaces/business rows, the backend uses the existing database data.
+
+Backend architecture:
+
+```text
+Controller -> DTO -> Service -> Store/Domain -> Mapper -> MySQL
+```
+
+- `web/`: controller layer for HTTP routing and unified API responses.
+- `dto/`: request DTOs for login, student creation, defect publishing, review, and status changes.
+- `service/`: business entry layer used by controllers.
+- `domain/`: ERP domain models and enums.
+- `store/`: core ERP business rules, student workspace isolation, defect switches, and realtime persistence orchestration; complex document, inventory, and settlement SQL is still centralized here and can be moved into custom mappers incrementally.
+- `entity/`: MyBatis-Plus table entities.
+- `mapper/`: MyBatis-Plus `BaseMapper` interfaces for core tables such as workspaces, users, products, documents, defect definitions, and defect reports.
 
 ## Quick Start
 
@@ -145,8 +161,7 @@ All built-in accounts use the initial password:
 
 | Account | Role | Usage |
 | --- | --- | --- |
-| `admin` | System administrator | ERP modules and testing competition management |
-| `superadmin` | Super administrator | Student management, defect publishing, file review, operation logs, scoring history |
+| `superadmin` | Super administrator | Student management, defect publishing, defect report review, file review, operation logs, scoring history, rankings |
 | `purchase_manager` | Purchase manager | Purchase module and purchase documents |
 | `warehouse_manager` | Warehouse manager | Inventory and audit workflows |
 | `sales_manager` | Sales manager | Sales module and sales documents |
@@ -159,7 +174,7 @@ All built-in accounts use the initial password:
 | `student01_settlement_manager` | Student ERP settlement manager | View income and expense settlements in `student01` workspace |
 | `student02` | Student main account | Same workflow with an isolated `student02` workspace |
 
-Student ERP subaccounts are isolated by workspace. For example, `student01_warehouse_staff` cannot see or audit `student02` documents. In the secondary ERP login, students choose a role and enter the password; the UI composes accounts such as `student01_admin` and `student01_purchase_staff` automatically.
+Student ERP subaccounts are isolated by workspace. For example, `student01_warehouse_staff` cannot see or audit `student02` documents. In the secondary ERP login, students choose a role and enter the password; the UI composes accounts such as `student01_admin` and `student01_purchase_staff` automatically. Logging out from a student ERP subaccount restores the saved primary student session, so the student can return to defect-report submission without typing `student01` again.
 
 ## Test and Build
 
@@ -215,7 +230,7 @@ Backend startup example:
 
 ```powershell
 $env:DB_HOST = "127.0.0.1"
-$env:DB_PORT = "3307"
+$env:DB_PORT = "3306"
 $env:DB_NAME = "erp"
 $env:DB_USERNAME = "erp"
 $env:DB_PASSWORD = "erp_local_password"

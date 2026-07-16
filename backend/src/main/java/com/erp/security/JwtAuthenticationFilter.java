@@ -1,5 +1,6 @@
 package com.erp.security;
 
+import com.erp.domain.ErpModels.Status;
 import com.erp.store.ErpStore;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -32,12 +33,16 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             try {
                 var username = jwtService.username(header.substring(7));
                 var user = store.userByUsername(username);
-                var auth = new UsernamePasswordAuthenticationToken(
-                    username,
-                    null,
-                    List.of(new SimpleGrantedAuthority("ROLE_" + user.role.name()))
-                );
-                SecurityContextHolder.getContext().setAuthentication(auth);
+                if (user.status == Status.ENABLED) {
+                    var auth = new UsernamePasswordAuthenticationToken(
+                        username,
+                        null,
+                        List.of(new SimpleGrantedAuthority("ROLE_" + user.role.name()))
+                    );
+                    SecurityContextHolder.getContext().setAuthentication(auth);
+                } else {
+                    SecurityContextHolder.clearContext();
+                }
             } catch (RuntimeException ignored) {
                 SecurityContextHolder.clearContext();
             }

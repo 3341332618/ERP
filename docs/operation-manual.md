@@ -4,9 +4,11 @@
 
 当前项目状态需要先记住两点：
 
-> 项目提供 MySQL 启动配置和 Flyway 建表脚本，后端启动时会连接 MySQL 并校验数据库结构。
+> 项目提供 MySQL 启动配置和 Flyway 建表脚本，后端启动时会连接 MySQL、执行迁移并从数据库表读取当前业务数据。用户、工作区、资料、单据、库存、结算、缺陷报告、文件提交、排行榜和操作日志都会实时写入 MySQL。
+> 这里的持久化不是“存档/读档”模式：系统不会把整份业务状态打包成快照再保存。创建学员、发布缺陷、提交报告、维护资料、创建/提交/审核单据、库存变更、生成结算和记录日志时，都会立即执行对应表的 `INSERT`、`UPDATE` 或 `DELETE`。
 
 > 测试竞赛采用“一个学员一套 ERP 工作区”模型：学员主账号负责提交缺陷报告和测试文件，系统会自动给每名学员生成管理员、采购、仓库、销售、结算 5 个 ERP 子账号，不同学员的数据互相隔离。
+> 平台侧不再提供 `admin` 账号；历史数据库中的旧 `admin` 会通过 Flyway V4 改名并禁用。缺陷发布、学员管理和评阅统一使用 `superadmin`。
 
 ## 1. 你需要准备什么
 
@@ -42,9 +44,13 @@ ERP/
 │  ├─ src/main/java/com/erp/
 │  │  ├─ common/                    # 统一响应、业务异常、全局异常处理
 │  │  ├─ domain/                    # 领域模型和枚举
+│  │  ├─ dto/                       # 请求/响应 DTO
+│  │  ├─ entity/                    # MyBatis-Plus 数据库实体
+│  │  ├─ mapper/                    # MyBatis-Plus Mapper 层
 │  │  ├─ security/                  # JWT 登录鉴权
-│  │  ├─ store/                     # 业务编排、演示数据和规则开关服务
-│  │  └─ web/                       # REST 接口控制器
+│  │  ├─ service/                   # 业务 Service 层
+│  │  ├─ store/                     # 核心业务规则、演示数据和实时持久化编排
+│  │  └─ web/                       # REST 接口 Controller 层
 │  ├─ src/main/resources/
 │  │  ├─ application.yml            # 通用配置
 │  │  ├─ application-local.yml      # 本地开发数据库默认配置
@@ -64,6 +70,18 @@ ERP/
 ├─ logs/                            # 本地运行日志，已被 Git 忽略
 └─ README.md                        # 项目总览
 ```
+
+后端现在按课堂常见 Java Web 分层组织：
+
+```text
+Controller -> DTO -> Service -> Store/Domain -> Mapper -> MySQL
+```
+
+- Controller 层只负责接口路径、请求参数和统一返回。
+- DTO 层承接登录、学员、缺陷发布、审核和状态切换等请求对象。
+- Service 层负责业务入口，Controller 不再直接调用核心存储对象。
+- Store/Domain 层保留 ERP 业务规则、缺陷开关、学员工作区隔离和复杂实时持久化编排。
+- Entity/Mapper 层使用 MyBatis-Plus 对接 MySQL，已建立核心表 Mapper；复杂单据、库存、结算 SQL 后续可继续拆到自定义 Mapper。
 
 ## 3. 第一次启动项目
 
@@ -101,12 +119,12 @@ docker compose ps
 | 项 | 默认值 |
 | --- | --- |
 | 主机 | `127.0.0.1` |
-| 端口 | `3307` |
+| 端口 | `3306` |
 | 数据库 | `erp` |
 | 用户名 | `erp` |
 | 密码 | `erp_local_password` |
 
-> 注意：本项目故意使用本机 `3307`，避免和你电脑已有的 MySQL `3306` 冲突。
+> 注意：如果你本机 `3306` 已经有 `erp` 数据库，就直接使用现有数据库，不要再启动 compose 的 mysql 服务；只有需要新建容器数据库时才启动 compose。
 
 ### 3.2 启动后端
 
@@ -192,8 +210,7 @@ http://127.0.0.1:5173
 
 | 账号 | 角色 | 用途 |
 | --- | --- | --- |
-| `admin` | 系统管理员 | 看全部 ERP 模块、管理测试竞赛 |
-| `superadmin` | 终极管理员 | 评阅测试文件、查看操作轨迹、评分历史 |
+| `superadmin` | 终极管理员 | 管理学员、发布缺陷、评阅缺陷报告和测试文件、查看操作轨迹、评分历史 |
 | `purchase_manager` | 采购主管 | 查看采购业务 |
 | `purchase_staff` | 采购专员 | 创建采购入库、采购退货 |
 | `warehouse_manager` | 仓库主管 | 查看库存业务 |
@@ -223,12 +240,13 @@ http://127.0.0.1:5173
 ### 6.1 登录系统
 
 1. 浏览器打开 `http://127.0.0.1:5173`。
-2. 使用 `admin / 123456` 登录。
-3. 看首页、菜单和基础模块是否出现。
+2. 使用 `student01 / 123456` 登录。
+3. 点击“进入我的 ERP 工作区”，选择“管理员”，输入密码 `123456`。
+4. 看首页、菜单和基础模块是否出现。
 
 ### 6.2 基础资料
 
-用 `admin` 查看：
+用 `student01_admin` 查看：
 
 - 商品品牌
 - 商品分类
@@ -285,12 +303,12 @@ http://127.0.0.1:5173
 
 ### 6.7 测试竞赛模块
 
-管理员侧：
+终极管理员侧：
 
-1. 登录 `admin / 123456`。
-2. 进入测试竞赛管理。
+1. 登录 `superadmin / 123456`。
+2. 进入测试竞赛后台。
 3. 在缺陷库中发布/关闭缺陷开关。发布后系统会出现对应错误行为，但学员端不会显示缺陷编号、摘要或任务清单。
-4. 查看学员列表、缺陷报告和排行榜。
+4. 查看学员列表、缺陷报告、测试文件、操作轨迹、评分历史和排行榜。
 
 学员侧：
 
@@ -303,16 +321,10 @@ http://127.0.0.1:5173
    - 销售专员：系统自动使用 `student01_sales_staff`
    - 结算主管：系统自动使用 `student01_settlement_manager`
 4. 学员在这套独立 ERP 工作区里自行探索异常行为。系统不会提示当前发布了哪些缺陷。
-5. 发现异常后，退出 ERP 子账号，重新登录 `student01 / 123456`。
+5. 发现异常后，直接点击右上角退出 ERP 子账号，系统会恢复到 `student01` 学员主会话，再提交缺陷报告。
 6. 进入“我的缺陷报告”提交报告，报告标题、模块、复现步骤、预期结果、实际结果都由学员自己填写。
 7. 上传测试文件。
 8. 查看个人提交记录和排行榜。
-
-终极管理员侧：
-
-1. 登录 `superadmin / 123456`。
-2. 评阅测试文件。
-3. 查看操作轨迹、评分历史和排行榜。
 
 ## 7. 怎么跑测试
 
@@ -423,7 +435,7 @@ frontend/dist/
 
 ```powershell
 $env:DB_HOST = "127.0.0.1"
-$env:DB_PORT = "3307"
+$env:DB_PORT = "3306"
 $env:DB_NAME = "erp"
 $env:DB_USERNAME = "erp"
 $env:DB_PASSWORD = "erp_local_password"
@@ -517,7 +529,7 @@ http://127.0.0.1:5173
 检查后端是否启动：
 
 ```powershell
-Invoke-WebRequest http://127.0.0.1:8080/api/auth/login -Method POST -ContentType 'application/json' -Body '{"username":"admin","password":"123456"}'
+Invoke-WebRequest http://127.0.0.1:8080/api/auth/login -Method POST -ContentType 'application/json' -Body '{"username":"superadmin","password":"123456"}'
 ```
 
 如果后端没启动，运行：
@@ -545,7 +557,7 @@ docker compose up -d mysql
 确认本地端口：
 
 ```powershell
-Get-NetTCPConnection -LocalPort 3307 -ErrorAction SilentlyContinue
+Get-NetTCPConnection -LocalPort 3306 -ErrorAction SilentlyContinue
 ```
 
 ### 10.4 端口被占用
@@ -553,7 +565,7 @@ Get-NetTCPConnection -LocalPort 3307 -ErrorAction SilentlyContinue
 查看端口：
 
 ```powershell
-Get-NetTCPConnection -LocalPort 8080,5173,3307 -ErrorAction SilentlyContinue
+Get-NetTCPConnection -LocalPort 8080,5173,3306 -ErrorAction SilentlyContinue
 ```
 
 常用端口：
@@ -562,7 +574,7 @@ Get-NetTCPConnection -LocalPort 8080,5173,3307 -ErrorAction SilentlyContinue
 | --- | --- |
 | `8080` | 后端 |
 | `5173` | 前端 |
-| `3307` | 本地 MySQL |
+| `3306` | 本地 MySQL |
 
 ### 10.5 Maven 报 `AccessDeniedException`
 
@@ -630,7 +642,7 @@ docker compose up -d mysql
 ```
 
 ```text
-帮我接着做 MySQL 业务持久化，先写计划再改代码。
+帮我检查 MySQL 持久化是否正常，并补充必要测试。
 ```
 
 ```text
